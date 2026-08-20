@@ -1,0 +1,51 @@
+
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:langchain_community.*",
+    "ignore::DeprecationWarning:langchain_experimental.*",
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning:huggingface_hub.*",
+]
+
+[project]
+name = "finguard-orchestrator"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "BillBaquerizo", email = "billbz9@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "chromadb>=1.5.9",
+    "deepeval>=4.1.5",
+    "fastapi>=0.141.1",
+    "langchain>=1.3.14",
+    "langchain-chroma>=1.1.0",
+    "langchain-community>=0.4.2",
+    "langchain-experimental>=0.4.2",
+    "langchain-huggingface>=1.2.2",
+    "langchain-openai>=1.4.1",
+    "pydantic>=2.13.4",
+    "pypdf>=6.14.2",
+    "python-dotenv>=1.2.2",
+    "ragas>=0.4.3",
+    "redis>=8.1.0",
+    "reportlab>=5.0.0",
+    "sentence-transformers>=5.6.1",
+    "streamlit>=1.60.0",
+    "uvicorn>=0.52.0",
+]
+
+[project.scripts]
+finguard-orchestrator = "finguard_orchestrator:main"
+
+[build-system]
+requires = ["uv_build>=0.12.1,<0.13.0"]
+build-backend = "uv_build"
