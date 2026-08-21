@@ -2,6 +2,15 @@
 
 ### Enterprise Multi-Agent Wealth Management Compliance & AML Audit Engine
 
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![LangGraph](https://img.shields.io/badge/Orchestration-LangGraph-FF6F00.svg)](https://langchain-ai.github.io/langgraph/)
+[![ChromaDB](https://img.shields.io/badge/Vector_Store-ChromaDB-FC521F.svg)](https://www.trychroma.com/)
+[![Redis Cache](https://img.shields.io/badge/Semantic_Cache-Redis-DC382D.svg?logo=redis&logoColor=white)](https://redis.io/)
+[![DeepEval](https://img.shields.io/badge/Evals-DeepEval-7B2CBF.svg)](https://confident-ai.com/)
+[![Docker Ready](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)](Dockerfile)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 FinGuard Orchestrator is an autonomous, multi-agent compliance auditing system designed to automate Anti-Money Laundering (AML) transaction monitoring and regulatory audit workflows. Built on a cyclic directed acyclic graph (DAG), the platform ingests unstructured transaction feeds (SWIFT ISO 20022/pacs.008), normalizes transactional entities, audits them against authoritative compliance rulebooks (FINRA Rule 3310, FinCEN advisories, ADGM regulations), and generates deterministic, citation-backed Suspicious Activity Reports (SARs).
 
 ---
