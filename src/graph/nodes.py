@@ -3,20 +3,29 @@
 import json
 from typing import Any, Dict
 from src.graph.state import AgentState
-from src.graph.schemas import ComplianceReport
+from src.graph.schemas import ComplianceReport, TransactionExtraction
 from src.ingestion.retriever import FinGuardRetriever
+from src.llm.client import get_llm
 
 
 # Quick patch in src/graph/nodes.py (extraction_node)
 
 def extraction_node(state: AgentState) -> Dict[str, Any]:
-    query = state["raw_query"].lower()
-    extracted_entities = {}
-    
-    has_swift = any(k in query for k in ["swift", "field :50k:", "field :59:", "wire", "txn-"])
-    has_reg = any(k in query for k in ["finra", "fincen", "rule", "structuring", "ctr", "sar", "aml"])
+    query = state["raw_query"]
+    query_lower = query.lower()
 
-    # If query mentions both or is ambiguous, do not constrain doc_type to allow cross-domain retrieval
+    has_swift = any(
+        k in query_lower
+        for k in ["swift", "field :50k:", "field :59:", "wire", "txn-"]
+    )
+
+    has_reg = any(
+        k in query_lower
+        for k in ["finra", "fincen", "rule", "structuring", "ctr", "sar", "aml"]
+    )
+
+    # If query mentions both or is ambiguous, do not constrain doc_type
+    # so retrieval can search across transaction and regulatory content.
     if has_swift and has_reg:
         doc_type = None
     elif has_swift:
@@ -26,18 +35,37 @@ def extraction_node(state: AgentState) -> Dict[str, Any]:
     else:
         doc_type = None
 
-    jurisdiction = "US_OFAC" if ("ofac" in query or "us" in query) else None
+    jurisdiction = "US_OFAC" if ("ofac" in query_lower or "us" in query_lower) else None
 
-    if "txn-" in query or "wire" in query:
-        extracted_entities["wires"] = ["TXN-984211-X"]
-        extracted_entities["amount"] = 8500.00
+    llm = get_llm()
+    structured_llm = llm.with_structured_output(TransactionExtraction)
 
-    print(f"🔹 [Extraction Node] doc_type='{doc_type}', jurisdiction='{jurisdiction}', entities={extracted_entities}")
+    extraction = structured_llm.invoke(
+        f"""
+        Extract AML-relevant information from the audit request below.
+
+        Only extract information explicitly present in the request.
+        Do not invent missing transaction IDs, amounts, regulations,
+        transaction types, jurisdictions, or suspicious patterns.
+
+        Audit request:
+        {query}
+        """
+    )
+
+    extracted_entities = extraction.model_dump()
+
+    print(
+        f"🔹 [Extraction Node] "
+        f"doc_type='{doc_type}', "
+        f"jurisdiction='{jurisdiction}', "
+        f"entities={extracted_entities}"
+    )
 
     return {
         "doc_type": doc_type,
         "jurisdiction": jurisdiction,
-        "extracted_entities": extracted_entities
+        "extracted_entities": extracted_entities,
     }
 
 def aml_audit_node(state: AgentState) -> Dict[str, Any]:
@@ -104,7 +132,7 @@ def structured_generation_node(state: AgentState) -> Dict[str, Any]:
     context = state.get("retrieved_context", [])
     extracted = state.get("extracted_entities", {})
     
-    flagged_wires = extracted.get("wires", ["TXN-984211-X"])
+    flagged_wires = extracted.get("transaction_ids", [])
     sources = list({c["metadata"].get("source", "finra_rule_3310.pdf") for c in context})
 
     summary_paragraphs = []

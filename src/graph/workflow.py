@@ -84,7 +84,9 @@ if __name__ == "__main__":
         "metadata": {
             "client_tier": "VIP_Institutional",
             "audit_id": "aud-9988-xx",
-            "batch_wire_count": len(initial_state["extracted_entities"].get("wires", [])),
+            "batch_wire_count": len(
+                initial_state["extracted_entities"].get("transaction_ids", [])
+            ),
         },
     }
 
