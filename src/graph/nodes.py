@@ -7,6 +7,7 @@ from src.graph.schemas import (
     ComplianceReport,
     TransactionExtraction,
     AMLAssessment,
+    CriticAssessment,
 )
 from src.ingestion.retriever import FinGuardRetriever
 from src.llm.client import get_llm
@@ -162,35 +163,88 @@ def aml_audit_node(state: AgentState) -> Dict[str, Any]:
 
 
 def auditor_critic_node(state: AgentState) -> Dict[str, Any]:
-    """Evaluates whether the AML assessment has sufficient evidence."""
+    """Critiques the AML assessment and determines the next workflow action."""
 
-    assessment = state.get("aml_assessment") or {}
     current_loop = state.get("loop_count", 0)
     max_loops = state.get("max_loops", 2)
 
-    insufficient_evidence = assessment.get("insufficient_evidence", True)
+    llm = get_llm()
+    structured_llm = llm.with_structured_output(CriticAssessment)
+
+    assessment = structured_llm.invoke(
+        f"""
+        You are the independent critic for an AML investigation.
+
+        Review the AML assessment and determine whether the available evidence
+        is sufficient to finalize the audit.
+
+        Distinguish carefully between:
+
+        MISSING_TRANSACTION_DATA:
+        Missing transaction facts such as amounts, dates, counterparties,
+        related transactions, geographic information, or transaction history.
+        Searching for additional regulations will NOT solve this problem.
+
+        MISSING_REGULATORY_CONTEXT:
+        Transaction facts exist, but relevant regulatory guidance is missing
+        or inadequate. Additional retrieval may help.
+
+        INCONSISTENT_ANALYSIS:
+        The AML assessment contradicts the supplied evidence or appears unsupported.
+
+        NONE:
+        The assessment is adequately supported.
+
+        Choose exactly one recommended action:
+
+        GENERATE:
+        Evidence is sufficient and the report can be finalized.
+
+        RETRIEVE_MORE:
+        Additional regulatory retrieval could resolve the problem.
+
+        STOP_INSUFFICIENT:
+        The required transaction evidence is unavailable, so additional
+        regulatory retrieval would not help.
+
+        Current loop:
+        {current_loop}
+
+        Maximum loops:
+        {max_loops}
+
+        Original audit request:
+        {state["raw_query"]}
+
+        Extracted entities:
+        {json.dumps(state.get("extracted_entities", {}), indent=2)}
+
+        AML assessment:
+        {json.dumps(state.get("aml_assessment", {}), indent=2)}
+        """
+    )
+
+    critic = assessment.model_dump()
+
+    # Never allow unlimited retrieval loops.
+    if critic["recommended_action"] == "RETRIEVE_MORE" and current_loop + 1 >= max_loops:
+        critic["recommended_action"] = "STOP_INSUFFICIENT"
+        critic["critique"] += " Maximum refinement loops reached."
 
     loop_count = current_loop + 1
 
-    if insufficient_evidence and loop_count < max_loops:
-        confidence = 0.50
-        is_complete = False
-    else:
-        confidence = 0.90 if not insufficient_evidence else 0.60
-        is_complete = True
-
     print(
-        f"⚖️ [Auditor Critic Node] "
-        f"Insufficient Evidence: {insufficient_evidence} | "
-        f"Confidence: {confidence:.2f} | "
-        f"Complete: {is_complete} "
-        f"(Loop {loop_count}/{max_loops})"
+        f"⚖️ [Auditor Critic] "
+        f"Failure Type: {critic['failure_type']} | "
+        f"Action: {critic['recommended_action']} | "
+        f"Missing: {critic['missing_evidence']} | "
+        f"Loop {loop_count}/{max_loops}"
     )
 
     return {
-        "confidence_score": confidence,
+        "critic_assessment": critic,
         "loop_count": loop_count,
-        "is_audit_complete": is_complete,
+        "is_audit_complete": critic["recommended_action"] != "RETRIEVE_MORE",
     }
 
 

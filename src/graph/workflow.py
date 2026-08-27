@@ -16,17 +16,27 @@ load_dotenv()
 
 
 def should_continue_audit(state: AgentState) -> str:
-    """Conditional routing function.
-    
-    Evaluates whether the audit should loop back for context refinement
-    or proceed to final structured report generation.
-    """
-    if state.get("is_audit_complete", False):
-        print("➡️ [Routing] Audit complete or max loops reached. Proceeding to Generation Node.")
-        return "generate"
-    else:
-        print("🔄 [Routing] Confidence score < 0.80. Looping back to AML Audit Node for refinement...")
+    critic = state.get("critic_assessment") or {}
+    action = critic.get("recommended_action", "STOP_INSUFFICIENT")
+
+    if action == "RETRIEVE_MORE":
+        print(
+            "🔄 [Routing] Critic requested additional regulatory retrieval."
+        )
         return "refine"
+
+    if action == "STOP_INSUFFICIENT":
+        print(
+            "🛑 [Routing] Missing transaction evidence. "
+            "Finalizing with insufficient evidence."
+        )
+        return "generate"
+
+    print(
+        "➡️ [Routing] Evidence sufficient. "
+        "Proceeding to generation."
+    )
+    return "generate"
 
 
 def build_finguard_graph():
@@ -71,6 +81,7 @@ if __name__ == "__main__":
         "extracted_entities": {},
         "retrieved_context": [],
         "aml_assessment": None,
+        "critic_assessment": None,
         "compliance_draft": None,
         "confidence_score": 0.0,
         "loop_count": 0,

@@ -85,3 +85,34 @@ class AMLAssessment(BaseModel):
     insufficient_evidence: bool = Field(
         description="True when there is not enough evidence to make a reliable AML judgment"
     )
+    
+class CriticAssessment(BaseModel):
+    """Critiques the AML assessment and recommends the next workflow action."""
+
+    is_sufficient: bool = Field(
+        description="Whether the available evidence is sufficient to finalize the AML assessment"
+    )
+
+    missing_evidence: List[str] = Field(
+        default_factory=list,
+        description="Specific evidence that is still missing"
+    )
+
+    failure_type: str = Field(
+        description=(
+            "Reason evidence is insufficient. "
+            "Use one of: NONE, MISSING_TRANSACTION_DATA, "
+            "MISSING_REGULATORY_CONTEXT, or INCONSISTENT_ANALYSIS"
+        )
+    )
+
+    recommended_action: str = Field(
+        description=(
+            "Next workflow action. "
+            "Use one of: GENERATE, RETRIEVE_MORE, or STOP_INSUFFICIENT"
+        )
+    )
+
+    critique: str = Field(
+        description="Short explanation of why this action was selected"
+    )
