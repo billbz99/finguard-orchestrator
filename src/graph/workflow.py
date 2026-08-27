@@ -70,6 +70,7 @@ if __name__ == "__main__":
         "jurisdiction": None,
         "extracted_entities": {},
         "retrieved_context": [],
+        "aml_assessment": None,
         "compliance_draft": None,
         "confidence_score": 0.0,
         "loop_count": 0,

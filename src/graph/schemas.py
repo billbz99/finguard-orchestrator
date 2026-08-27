@@ -57,3 +57,31 @@ class ComplianceReport(BaseModel):
         default_factory=list,
         description="Cryptographic or metadata IDs/sources of cited compliance records"
     )
+    
+class AMLAssessment(BaseModel):
+    risk_rating: str = Field(
+        description="Low, Medium, or High AML risk assessment"
+    )
+
+    suspicious_patterns: List[str] = Field(
+        default_factory=list,
+        description="AML patterns supported by the available evidence"
+    )
+
+    flagged_transactions: List[str] = Field(
+        default_factory=list,
+        description="Transaction IDs that should be flagged"
+    )
+
+    applicable_regulations: List[str] = Field(
+        default_factory=list,
+        description="Regulations supported by the retrieved context"
+    )
+
+    reasoning_summary: str = Field(
+        description="Evidence-grounded explanation of the AML assessment"
+    )
+
+    insufficient_evidence: bool = Field(
+        description="True when there is not enough evidence to make a reliable AML judgment"
+    )

@@ -3,7 +3,11 @@
 import json
 from typing import Any, Dict
 from src.graph.state import AgentState
-from src.graph.schemas import ComplianceReport, TransactionExtraction
+from src.graph.schemas import (
+    ComplianceReport,
+    TransactionExtraction,
+    AMLAssessment,
+)
 from src.ingestion.retriever import FinGuardRetriever
 from src.llm.client import get_llm
 
@@ -69,8 +73,12 @@ def extraction_node(state: AgentState) -> Dict[str, Any]:
     }
 
 def aml_audit_node(state: AgentState) -> Dict[str, Any]:
-    """Executes vector retrieval against ChromaDB using FinGuardRetriever."""
-    print(f"🔍 [AML Audit Node] Querying vector store (Loop {state.get('loop_count', 0)})...")
+    """Executes vector retrieval against ChromaDB and performs AML reasoning."""
+
+    print(
+        f"🔍 [AML Audit Node] Querying vector store "
+        f"(Loop {state.get('loop_count', 0)})..."
+    )
 
     retriever = FinGuardRetriever(
         chroma_path="./data/chroma",
@@ -80,8 +88,12 @@ def aml_audit_node(state: AgentState) -> Dict[str, Any]:
 
     # If in a refinement loop, append context flags to query
     query = state["raw_query"]
+
     if state.get("loop_count", 0) > 0:
-        query += " FINRA Rule 3310 structuring Currency Transaction Reporting thresholds"
+        query += (
+            " FINRA Rule 3310 structuring "
+            "Currency Transaction Reporting thresholds"
+        )
 
     chunks = retriever.retrieve(
         query=query,
@@ -92,68 +104,136 @@ def aml_audit_node(state: AgentState) -> Dict[str, Any]:
     )
 
     # Filter out chunks below threshold score 0.15
-    valid_chunks = [c for c in chunks if c.get("rerank_score", 0.0) >= 0.15]
+    valid_chunks = [
+        c for c in chunks
+        if c.get("rerank_score", 0.0) >= 0.15
+    ]
 
-    print(f"✅ [AML Audit Node] Found {len(valid_chunks)} context chunks passing confidence threshold.")
-    return {"retrieved_context": valid_chunks}
+    print(
+        f"✅ [AML Audit Node] Found {len(valid_chunks)} "
+        f"context chunks passing confidence threshold."
+    )
+
+    llm = get_llm()
+    structured_llm = llm.with_structured_output(AMLAssessment)
+
+    retrieved_text = "\n\n".join(
+        c.get("content", "")
+        for c in valid_chunks
+    )
+
+    assessment = structured_llm.invoke(
+        f"""
+        You are performing an AML compliance assessment.
+
+        Analyze the transaction information only using:
+        1. the user's audit request,
+        2. the extracted transaction entities,
+        3. the retrieved regulatory context supplied below.
+
+        Do not assume that a relevant regulation means the transaction is suspicious.
+
+        Do not invent transaction behavior, amounts, counterparties, dates,
+        countries, or other evidence that is not present.
+
+        If there is not enough transaction evidence to support an AML conclusion,
+        set insufficient_evidence to true.
+
+        Audit request:
+        {state["raw_query"]}
+
+        Extracted transaction information:
+        {json.dumps(state.get("extracted_entities", {}), indent=2)}
+
+        Retrieved regulatory context:
+        {retrieved_text}
+        """
+    )
+
+    print(
+        f"🧠 [AML Reasoning] Assessment: "
+        f"{assessment.model_dump()}"
+    )
+
+    return {
+        "retrieved_context": valid_chunks,
+        "aml_assessment": assessment.model_dump(),
+    }
 
 
 def auditor_critic_node(state: AgentState) -> Dict[str, Any]:
-    """Evaluates factual grounding and calculates confidence score."""
-    context = state.get("retrieved_context", [])
+    """Evaluates whether the AML assessment has sufficient evidence."""
+
+    assessment = state.get("aml_assessment") or {}
     current_loop = state.get("loop_count", 0)
-    
-    # Calculate confidence based on top rerank score
-    top_score = max([c.get("rerank_score", 0.0) for c in context], default=0.0)
-    
-    # Assign confidence score
-    if top_score > 0.5:
-        confidence = 0.90
-    elif top_score > 0.15:
-        confidence = 0.70
-    else:
-        confidence = 0.30
+    max_loops = state.get("max_loops", 2)
+
+    insufficient_evidence = assessment.get("insufficient_evidence", True)
 
     loop_count = current_loop + 1
-    max_loops = state.get("max_loops", 2)
-    is_complete = (confidence >= 0.80) or (loop_count >= max_loops)
 
-    print(f"⚖️ [Auditor Critic Node] Top Score: {top_score:.4f} | Confidence: {confidence:.2f} | Complete: {is_complete} (Loop {loop_count}/{max_loops})")
+    if insufficient_evidence and loop_count < max_loops:
+        confidence = 0.50
+        is_complete = False
+    else:
+        confidence = 0.90 if not insufficient_evidence else 0.60
+        is_complete = True
+
+    print(
+        f"⚖️ [Auditor Critic Node] "
+        f"Insufficient Evidence: {insufficient_evidence} | "
+        f"Confidence: {confidence:.2f} | "
+        f"Complete: {is_complete} "
+        f"(Loop {loop_count}/{max_loops})"
+    )
 
     return {
         "confidence_score": confidence,
         "loop_count": loop_count,
-        "is_audit_complete": is_complete
+        "is_audit_complete": is_complete,
     }
 
 
 def structured_generation_node(state: AgentState) -> Dict[str, Any]:
-    """Formats findings into a Pydantic ComplianceReport schema."""
+    """Formats the AML assessment into a Pydantic ComplianceReport."""
+
     context = state.get("retrieved_context", [])
-    extracted = state.get("extracted_entities", {})
-    
-    flagged_wires = extracted.get("transaction_ids", [])
-    sources = list({c["metadata"].get("source", "finra_rule_3310.pdf") for c in context})
+    assessment = state.get("aml_assessment") or {}
 
-    summary_paragraphs = []
-    regulations = []
+    risk_rating = assessment.get("risk_rating", "Low")
 
-    for c in context:
-        summary_paragraphs.append(c["content"])
-        if "3310" in c["content"]:
-            regulations.append("FINRA Rule 3310")
-        if "5324" in c["content"] or "Structuring" in c["content"]:
-            regulations.append("31 U.S.C. 5324 (FinCEN Structuring)")
+    flagged_wires = assessment.get(
+        "flagged_transactions",
+        []
+    )
+
+    regulations = assessment.get(
+        "applicable_regulations",
+        []
+    )
+
+    summary = assessment.get(
+        "reasoning_summary",
+        "No AML assessment available."
+    )
+
+    sources = list({
+        c["metadata"].get("source", "unknown")
+        for c in context
+    })
 
     report = ComplianceReport(
-        risk_rating="HIGH" if state.get("confidence_score", 0) >= 0.8 else "MEDIUM",
+        risk_rating=risk_rating.upper(),
         flagged_wires=flagged_wires,
-        applicable_regulations=list(set(regulations)) or ["FINRA Rule 3310"],
-        audit_summary="\n\n".join(summary_paragraphs) if summary_paragraphs else "No relevant violations detected.",
+        applicable_regulations=regulations,
+        audit_summary=summary,
         source_document_hashes=sources
     )
 
-    print(f"📝 [Generation Node] ComplianceReport created successfully with Risk Rating: {report.risk_rating}")
+    print(
+        f"📝 [Generation Node] ComplianceReport created successfully "
+        f"with Risk Rating: {report.risk_rating}"
+    )
 
     return {
         "final_report": report.model_dump(),

@@ -10,6 +10,7 @@ class AgentState(TypedDict):
     jurisdiction: Optional[str]
     extracted_entities: Dict[str, Any]
     retrieved_context: List[Dict[str, Any]]
+    aml_assessment: Optional[Dict[str, Any]]
     compliance_draft: Optional[str]
     confidence_score: float
     loop_count: int
