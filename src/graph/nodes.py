@@ -1,6 +1,7 @@
 # src/graph/nodes.py
 
 import json
+import re
 from typing import Any, Dict
 from src.graph.state import AgentState
 from src.graph.schemas import (
@@ -40,7 +41,14 @@ def extraction_node(state: AgentState) -> Dict[str, Any]:
     else:
         doc_type = None
 
-    jurisdiction = "US_OFAC" if ("ofac" in query_lower or "us" in query_lower) else None
+    has_us_jurisdiction = bool(
+        re.search(
+            r"\b(?:ofac|united\s+states)\b|(?<!\w)u\.s\.(?!\w)",
+            query_lower,
+        )
+        or re.search(r"\bUS\b", query)
+    )
+    jurisdiction = "US_OFAC" if has_us_jurisdiction else None
 
     llm = get_llm()
     structured_llm = llm.with_structured_output(TransactionExtraction)
