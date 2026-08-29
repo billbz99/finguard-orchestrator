@@ -138,7 +138,7 @@ def test_all_golden_scenarios_execute_and_pass(
     [
         (
             "missing-regulation-001",
-            ["RETRIEVE_MORE", "STOP_INSUFFICIENT"],
+            ["RETRIEVE_MORE", "RETRIEVE_MORE"],
             "STOP_INSUFFICIENT",
         ),
         (

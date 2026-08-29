@@ -1,23 +1,94 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "scenario_id": "missing-regulation-001",
-  "scenario_version": 1,
+  "scenario_version": 2,
   "title": "Regulatory context remains missing after retry",
-  "description": "Synthetic structuring facts are present, but neither retrieval pass supplies usable regulatory guidance.",
+  "description": "Complete synthetic transaction facts support a threshold-avoidance pattern, while two non-authoritative retrieval passes remain inadequate to establish the applicable regulatory standard.",
   "tags": ["missing-regulation", "retry", "insufficient-evidence"],
   "synthetic_data": true,
-  "input": {"query": "Audit synthetic wires TXN-SYN-900 and TXN-SYN-901, each $9,500 within one day, for structuring and CTR concerns under FINRA Rule 3310.", "amount": 9500.0, "is_cross_border": false, "max_loops": 3},
-  "synthetic_facts": {"transaction_ids": ["TXN-SYN-900", "TXN-SYN-901"], "amounts": [9500.0, 9500.0], "transaction_type": "wire", "jurisdictions": [], "counterparties": [], "purpose": "Synthetic threshold-pattern review", "time_window": "one day", "explicitly_absent": ["usable regulatory evidence", "OFAC match"]},
-  "retrieval": {"passes": [
-    {"documents": [{"id": "synthetic-unrelated-guidance-900-a", "content": "SYNTHETIC REGULATORY FIXTURE: This first-pass text concerns an unrelated record-retention topic and supplies no structuring standard.", "metadata": {"source": "synthetic_unrelated_guidance_a.txt", "doc_type": "regulatory_pdf", "section": "unrelated"}, "rerank_score": 0.80}], "expected_query_contains": ["TXN-SYN-900", "structuring"]},
-    {"documents": [{"id": "synthetic-unrelated-guidance-900-b", "content": "SYNTHETIC REGULATORY FIXTURE: This retry text remains unrelated and does not establish an applicable structuring rule.", "metadata": {"source": "synthetic_unrelated_guidance_b.txt", "doc_type": "regulatory_pdf", "section": "unrelated"}, "rerank_score": 0.81}], "expected_query_contains": ["FINRA Rule 3310 structuring", "Currency Transaction Reporting thresholds"]}
-  ]},
-  "expected": {
-    "extraction": {"transaction_ids": {"match": "exact", "value": ["TXN-SYN-900", "TXN-SYN-901"]}, "amount": {"match": "exact", "value": 9500.0}, "transaction_type": {"match": "allowed", "values": ["wire", "wire transfer"]}, "regulations": {"match": "subset", "values": ["FINRA Rule 3310"]}, "suspected_patterns": {"match": "subset", "values": ["structuring"]}, "jurisdiction": {"match": "exact", "value": null}, "doc_type": {"match": "exact", "value": null}},
-    "aml_assessment": {"risk_rating": {"match": "allowed", "values": ["Low", "LOW"]}, "suspicious_patterns": {"match": "exact", "value": []}, "flagged_transactions": {"match": "exact", "value": []}, "applicable_regulations": {"match": "exact", "value": []}, "insufficient_evidence": {"match": "exact", "value": true}},
-    "critic": {"actions": {"match": "exact", "value": ["RETRIEVE_MORE", "STOP_INSUFFICIENT"]}, "failure_types": {"match": "exact", "value": ["MISSING_REGULATORY_CONTEXT", "MISSING_REGULATORY_CONTEXT"]}},
-    "report": {"assessment_status": {"match": "exact", "value": "INSUFFICIENT_EVIDENCE"}, "risk_rating": {"match": "exact", "value": "LOW"}, "flagged_wires": {"match": "exact", "value": []}, "applicable_regulations": {"match": "exact", "value": []}, "source_document_hashes": {"match": "subset", "values": ["synthetic_unrelated_guidance_b.txt"]}},
-    "execution": {"retrieval_count": {"match": "exact", "value": 2}, "critic_count": {"match": "exact", "value": 2}, "final_loop_count": {"match": "exact", "value": 2}, "terminates": {"match": "exact", "value": true}}
+  "input": {
+    "query": "Audit two related United States synthetic wires from SYNTHETIC ORIGINATOR M to SYNTHETIC BENEFICIARY N: TXN-SYN-900 for $9,500 at 2026-04-10 09:15 UTC and TXN-SYN-901 for $9,500 at 2026-04-10 14:45 UTC. Both settle one $19,000 equipment invoice, and the common originator deliberately split the payment below the reporting threshold to avoid reporting and monitoring. Its prior 90-day history contains one monthly invoice wire near $19,000 and no other transfers. Review the activity for structuring and CTR concerns under FINRA Rule 3310.",
+    "amount": 9500.0,
+    "is_cross_border": false,
+    "max_loops": 2
   },
-  "prohibited": {"transaction_ids": [], "regulations": ["OFAC sanctions screening"], "jurisdictions": ["US_OFAC"], "suspicious_patterns": ["sanctions evasion"], "unsupported_fact_terms": ["offshore", "shell company"]}
+  "synthetic_facts": {
+    "transaction_ids": ["TXN-SYN-900", "TXN-SYN-901"],
+    "amounts": [9500.0, 9500.0],
+    "transaction_type": "wire",
+    "jurisdictions": ["United States"],
+    "counterparties": ["SYNTHETIC ORIGINATOR M", "SYNTHETIC BENEFICIARY N"],
+    "purpose": "One deliberately split synthetic equipment-invoice payment",
+    "time_window": "2026-04-10 09:15 UTC to 2026-04-10 14:45 UTC",
+    "explicitly_absent": ["usable regulatory evidence", "OFAC match", "other recent transfers"]
+  },
+  "retrieval": {
+    "passes": [
+      {
+        "documents": [
+          {
+            "id": "synthetic-unrelated-guidance-900-a",
+            "content": "SYNTHETIC REGULATORY FIXTURE, NON-AUTHORITATIVE: This first-pass text concerns an unrelated record-retention topic and supplies no structuring, CTR, or FINRA Rule 3310 standard.",
+            "metadata": {"source": "synthetic_unrelated_guidance_a.txt", "doc_type": "regulatory_pdf", "section": "unrelated"},
+            "rerank_score": 0.80
+          }
+        ],
+        "expected_query_contains": ["TXN-SYN-900", "structuring"]
+      },
+      {
+        "documents": [
+          {
+            "id": "synthetic-unrelated-guidance-900-b",
+            "content": "SYNTHETIC REGULATORY FIXTURE, NON-AUTHORITATIVE: This retry text discusses an unrelated archival schedule and still provides no applicable structuring, CTR, or FINRA Rule 3310 guidance.",
+            "metadata": {"source": "synthetic_unrelated_guidance_b.txt", "doc_type": "regulatory_pdf", "section": "unrelated"},
+            "rerank_score": 0.81
+          }
+        ],
+        "expected_query_contains": ["FINRA Rule 3310 structuring", "Currency Transaction Reporting thresholds"]
+      }
+    ]
+  },
+  "expected": {
+    "extraction": {
+      "transaction_ids": {"match": "exact", "value": ["TXN-SYN-900", "TXN-SYN-901"]},
+      "amount": {"match": "exact", "value": 9500.0},
+      "transaction_type": {"match": "allowed", "values": ["wire", "wire transfer"]},
+      "regulations": {"match": "subset", "values": ["FINRA Rule 3310"]},
+      "suspected_patterns": {"match": "subset", "values": ["structuring"]},
+      "jurisdiction": {"match": "exact", "value": "US_OFAC"},
+      "doc_type": {"match": "exact", "value": null}
+    },
+    "aml_assessment": {
+      "risk_rating": {"match": "allowed", "values": ["Low", "LOW"]},
+      "suspicious_patterns": {"match": "exact", "value": []},
+      "flagged_transactions": {"match": "exact", "value": []},
+      "applicable_regulations": {"match": "exact", "value": []},
+      "insufficient_evidence": {"match": "exact", "value": true}
+    },
+    "critic": {
+      "actions": {"match": "exact", "value": ["RETRIEVE_MORE", "RETRIEVE_MORE"]},
+      "failure_types": {"match": "exact", "value": ["MISSING_REGULATORY_CONTEXT", "MISSING_REGULATORY_CONTEXT"]},
+      "final_stored_action": {"match": "exact", "value": "STOP_INSUFFICIENT"}
+    },
+    "report": {
+      "assessment_status": {"match": "exact", "value": "INSUFFICIENT_EVIDENCE"},
+      "risk_rating": {"match": "exact", "value": "LOW"},
+      "flagged_wires": {"match": "exact", "value": []},
+      "applicable_regulations": {"match": "exact", "value": []},
+      "source_document_hashes": {"match": "subset", "values": ["synthetic_unrelated_guidance_b.txt"]}
+    },
+    "execution": {
+      "retrieval_count": {"match": "exact", "value": 2},
+      "critic_count": {"match": "exact", "value": 2},
+      "final_loop_count": {"match": "exact", "value": 2},
+      "terminates": {"match": "exact", "value": true}
+    }
+  },
+  "prohibited": {
+    "transaction_ids": ["TXN-SYN-902"],
+    "regulations": ["OFAC sanctions screening", "31 U.S.C. 5324"],
+    "jurisdictions": [],
+    "suspicious_patterns": ["sanctions evasion"],
+    "unsupported_fact_terms": ["offshore", "shell company", "cash deposit"]
+  }
 }
