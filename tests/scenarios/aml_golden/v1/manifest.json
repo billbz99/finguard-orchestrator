@@ -1,6 +1,6 @@
 {
   "dataset_id": "finguard-synthetic-aml-golden",
-  "dataset_version": "1.0.0",
+  "dataset_version": "1.1.0",
   "schema_version": "1.0",
   "expectation_profile": "aml-golden-v1",
   "scenarios": [
@@ -15,6 +15,54 @@
     {
       "scenario_id": "insufficient-facts-001",
       "file": "cases/insufficient-facts-001.json"
+    },
+    {
+      "scenario_id": "missing-amount-001",
+      "file": "cases/missing-amount-001.json"
+    },
+    {
+      "scenario_id": "multiple-ids-001",
+      "file": "cases/multiple-ids-001.json"
+    },
+    {
+      "scenario_id": "ofac-us-001",
+      "file": "cases/ofac-us-001.json"
+    },
+    {
+      "scenario_id": "jurisdiction-ambiguous-001",
+      "file": "cases/jurisdiction-ambiguous-001.json"
+    },
+    {
+      "scenario_id": "jurisdiction-substrings-001",
+      "file": "cases/jurisdiction-substrings-001.json"
+    },
+    {
+      "scenario_id": "missing-regulation-001",
+      "file": "cases/missing-regulation-001.json"
+    },
+    {
+      "scenario_id": "single-refinement-001",
+      "file": "cases/single-refinement-001.json"
+    },
+    {
+      "scenario_id": "max-loop-001",
+      "file": "cases/max-loop-001.json"
+    },
+    {
+      "scenario_id": "multiple-regulations-001",
+      "file": "cases/multiple-regulations-001.json"
+    },
+    {
+      "scenario_id": "relevant-rule-benign-facts-001",
+      "file": "cases/relevant-rule-benign-facts-001.json"
+    },
+    {
+      "scenario_id": "conflicting-evidence-001",
+      "file": "cases/conflicting-evidence-001.json"
+    },
+    {
+      "scenario_id": "hallucination-trap-001",
+      "file": "cases/hallucination-trap-001.json"
     }
   ]
 }

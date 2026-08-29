@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "relevant-rule-benign-facts-001",
+  "scenario_version": 1,
+  "title": "Relevant AML rule with benign synthetic facts",
+  "description": "Applicable AML monitoring guidance is retrieved for a fully supported benign transaction and must not create suspicion by itself.",
+  "tags": ["benign", "regulatory-context", "negative-control", "low-risk"],
+  "synthetic_data": true,
+  "input": {"query": "Review synthetic wire TXN-SYN-1300 for $3,200 under FINRA Rule 3310. It pays synthetic invoice INV-SYN-1300 between established synthetic businesses, with no related or unusual transactions.", "amount": 3200.0, "is_cross_border": false, "max_loops": 2},
+  "synthetic_facts": {"transaction_ids": ["TXN-SYN-1300"], "amounts": [3200.0], "transaction_type": "wire", "jurisdictions": [], "counterparties": ["SYNTHETIC BUSINESS H", "SYNTHETIC BUSINESS I"], "purpose": "Synthetic invoice INV-SYN-1300", "time_window": null, "explicitly_absent": ["related transactions", "evasion intent", "OFAC match"]},
+  "retrieval": {"passes": [{"documents": [{"id": "synthetic-benign-rule-1300", "content": "SYNTHETIC REGULATORY FIXTURE, NOT VERBATIM LEGAL TEXT: AML monitoring guidance is relevant to review, but relevance alone does not establish suspicious transaction behavior.", "metadata": {"source": "synthetic_finra_benign_context.txt", "doc_type": "regulatory_pdf", "section": "synthetic-monitoring"}, "rerank_score": 0.91}], "expected_query_contains": ["TXN-SYN-1300", "FINRA Rule 3310"]}]},
+  "expected": {
+    "extraction": {"transaction_ids": {"match": "exact", "value": ["TXN-SYN-1300"]}, "amount": {"match": "exact", "value": 3200.0}, "transaction_type": {"match": "allowed", "values": ["wire", "wire transfer"]}, "regulations": {"match": "subset", "values": ["FINRA Rule 3310"]}, "suspected_patterns": {"match": "exact", "value": []}, "jurisdiction": {"match": "exact", "value": null}, "doc_type": {"match": "exact", "value": null}},
+    "aml_assessment": {"risk_rating": {"match": "allowed", "values": ["Low", "LOW"]}, "suspicious_patterns": {"match": "exact", "value": []}, "flagged_transactions": {"match": "exact", "value": []}, "applicable_regulations": {"match": "subset", "values": ["FINRA Rule 3310"]}, "insufficient_evidence": {"match": "exact", "value": false}},
+    "critic": {"actions": {"match": "exact", "value": ["GENERATE"]}, "failure_types": {"match": "exact", "value": ["NONE"]}},
+    "report": {"assessment_status": {"match": "exact", "value": "COMPLETE"}, "risk_rating": {"match": "exact", "value": "LOW"}, "flagged_wires": {"match": "exact", "value": []}, "applicable_regulations": {"match": "subset", "values": ["FINRA Rule 3310"]}, "source_document_hashes": {"match": "subset", "values": ["synthetic_finra_benign_context.txt"]}},
+    "execution": {"retrieval_count": {"match": "exact", "value": 1}, "critic_count": {"match": "exact", "value": 1}, "final_loop_count": {"match": "exact", "value": 1}, "terminates": {"match": "exact", "value": true}}
+  },
+  "prohibited": {"transaction_ids": [], "regulations": [], "jurisdictions": ["US_OFAC"], "suspicious_patterns": ["structuring", "sanctions evasion", "terrorist financing"], "unsupported_fact_terms": ["reporting-threshold evasion", "offshore", "shell company"]}
+}

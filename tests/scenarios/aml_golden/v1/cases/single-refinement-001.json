@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "single-refinement-001",
+  "scenario_version": 1,
+  "title": "Single successful regulatory refinement",
+  "description": "The first synthetic retrieval is inadequate; the retry supplies synthetic structuring guidance and enables generation.",
+  "tags": ["retry", "single-refinement", "structuring", "complete"],
+  "synthetic_data": true,
+  "input": {"query": "Audit synthetic wires TXN-SYN-1000 and TXN-SYN-1001, each $9,800 within 24 hours, for structuring and CTR threshold concerns.", "amount": 9800.0, "is_cross_border": false, "max_loops": 2},
+  "synthetic_facts": {"transaction_ids": ["TXN-SYN-1000", "TXN-SYN-1001"], "amounts": [9800.0, 9800.0], "transaction_type": "wire", "jurisdictions": [], "counterparties": [], "purpose": "Synthetic threshold-evasion review", "time_window": "24 hours", "explicitly_absent": ["OFAC match", "foreign jurisdiction"]},
+  "retrieval": {"passes": [
+    {"documents": [{"id": "synthetic-inadequate-1000", "content": "SYNTHETIC REGULATORY FIXTURE: First-pass text is incomplete and supplies no usable structuring standard.", "metadata": {"source": "synthetic_inadequate_guidance.txt", "doc_type": "regulatory_pdf", "section": "incomplete"}, "rerank_score": 0.75}], "expected_query_contains": ["TXN-SYN-1000", "structuring"]},
+    {"documents": [{"id": "synthetic-refined-1000", "content": "SYNTHETIC REGULATORY FIXTURE, NOT VERBATIM LEGAL TEXT: Related transfers deliberately placed below a reporting threshold may support structuring when evasion facts are explicit.", "metadata": {"source": "synthetic_refined_structuring_guidance.txt", "doc_type": "regulatory_pdf", "section": "synthetic-structuring"}, "rerank_score": 0.94}], "expected_query_contains": ["FINRA Rule 3310 structuring", "Currency Transaction Reporting thresholds"]}
+  ]},
+  "expected": {
+    "extraction": {"transaction_ids": {"match": "exact", "value": ["TXN-SYN-1000", "TXN-SYN-1001"]}, "amount": {"match": "exact", "value": 9800.0}, "transaction_type": {"match": "allowed", "values": ["wire", "wire transfer"]}, "regulations": {"match": "exact", "value": []}, "suspected_patterns": {"match": "subset", "values": ["structuring"]}, "jurisdiction": {"match": "exact", "value": null}, "doc_type": {"match": "exact", "value": null}},
+    "aml_assessment": {"risk_rating": {"match": "allowed", "values": ["High", "HIGH"]}, "suspicious_patterns": {"match": "subset", "values": ["structuring"]}, "flagged_transactions": {"match": "exact", "value": ["TXN-SYN-1000", "TXN-SYN-1001"]}, "applicable_regulations": {"match": "subset", "values": ["FINRA Rule 3310"]}, "insufficient_evidence": {"match": "exact", "value": false}},
+    "critic": {"actions": {"match": "exact", "value": ["RETRIEVE_MORE", "GENERATE"]}, "failure_types": {"match": "exact", "value": ["MISSING_REGULATORY_CONTEXT", "NONE"]}},
+    "report": {"assessment_status": {"match": "exact", "value": "COMPLETE"}, "risk_rating": {"match": "exact", "value": "HIGH"}, "flagged_wires": {"match": "exact", "value": ["TXN-SYN-1000", "TXN-SYN-1001"]}, "applicable_regulations": {"match": "subset", "values": ["FINRA Rule 3310"]}, "source_document_hashes": {"match": "subset", "values": ["synthetic_refined_structuring_guidance.txt"]}},
+    "execution": {"retrieval_count": {"match": "exact", "value": 2}, "critic_count": {"match": "exact", "value": 2}, "final_loop_count": {"match": "exact", "value": 2}, "terminates": {"match": "exact", "value": true}}
+  },
+  "prohibited": {"transaction_ids": [], "regulations": [], "jurisdictions": ["US_OFAC"], "suspicious_patterns": ["sanctions evasion"], "unsupported_fact_terms": ["offshore", "shell company"]}
+}

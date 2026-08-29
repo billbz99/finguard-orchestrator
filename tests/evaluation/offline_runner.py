@@ -68,6 +68,11 @@ class ScenarioEvaluationResult(BaseModel):
     critic_count: int = Field(ge=0)
     final_loop_count: int = Field(ge=0)
     final_status: str | None
+    final_critic_action: str | None
+    jurisdiction: str | None
+    final_risk_rating: str | None
+    flagged_wires: list[str]
+    suspicious_patterns: list[str]
 
 
 def _matcher_value(matcher):
@@ -90,7 +95,7 @@ def _response_plan(scenario: GoldenScenario):
         suspected_patterns=_matcher_value(expected.extraction.suspected_patterns),
         jurisdiction=_matcher_value(expected.extraction.jurisdiction),
     )
-    aml_assessment = AMLAssessment(
+    final_aml_assessment = AMLAssessment(
         risk_rating=_matcher_value(expected.aml_assessment.risk_rating),
         suspicious_patterns=_matcher_value(
             expected.aml_assessment.suspicious_patterns
@@ -108,6 +113,25 @@ def _response_plan(scenario: GoldenScenario):
     )
     actions = _matcher_value(expected.critic.actions)
     failure_types = _matcher_value(expected.critic.failure_types)
+    aml_assessments = []
+    for index, action in enumerate(actions):
+        if action == "RETRIEVE_MORE" and index < len(actions) - 1:
+            aml_assessments.append(
+                final_aml_assessment.model_copy(
+                    update={
+                        "risk_rating": "Low",
+                        "suspicious_patterns": [],
+                        "flagged_transactions": [],
+                        "applicable_regulations": [],
+                        "reasoning_summary": (
+                            "Synthetic offline replay requires more regulatory context."
+                        ),
+                        "insufficient_evidence": True,
+                    }
+                )
+            )
+        else:
+            aml_assessments.append(final_aml_assessment)
     critics = [
         CriticAssessment(
             is_sufficient=action == "GENERATE",
@@ -120,7 +144,7 @@ def _response_plan(scenario: GoldenScenario):
     ]
     return {
         TransactionExtraction: [extraction],
-        AMLAssessment: [aml_assessment] * len(actions),
+        AMLAssessment: aml_assessments,
         CriticAssessment: critics,
     }
 
@@ -425,4 +449,13 @@ def run_offline_replay(scenario: GoldenScenario) -> ScenarioEvaluationResult:
         critic_count=len(critic_actions),
         final_loop_count=state["loop_count"],
         final_status=(state.get("final_report") or {}).get("assessment_status"),
+        final_critic_action=(state.get("critic_assessment") or {}).get(
+            "recommended_action"
+        ),
+        jurisdiction=state.get("jurisdiction"),
+        final_risk_rating=(state.get("final_report") or {}).get("risk_rating"),
+        flagged_wires=(state.get("final_report") or {}).get("flagged_wires", []),
+        suspicious_patterns=(state.get("aml_assessment") or {}).get(
+            "suspicious_patterns", []
+        ),
     )

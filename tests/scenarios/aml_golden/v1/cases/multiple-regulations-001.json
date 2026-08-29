@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "multiple-regulations-001",
+  "scenario_version": 1,
+  "title": "Multiple synthetic AML regulatory references",
+  "description": "Explicit synthetic structuring facts are reviewed against two named AML references.",
+  "tags": ["multiple-regulations", "structuring", "high-risk"],
+  "synthetic_data": true,
+  "input": {"query": "Audit synthetic wires TXN-SYN-1200 and TXN-SYN-1201, each $9,600 within 12 hours to evade reporting, under FINRA Rule 3310 and 31 U.S.C. 5324.", "amount": 9600.0, "is_cross_border": false, "max_loops": 2},
+  "synthetic_facts": {"transaction_ids": ["TXN-SYN-1200", "TXN-SYN-1201"], "amounts": [9600.0, 9600.0], "transaction_type": "wire", "jurisdictions": [], "counterparties": [], "purpose": "Explicit synthetic threshold evasion", "time_window": "12 hours", "explicitly_absent": ["OFAC match", "sanctions issue"]},
+  "retrieval": {"passes": [{"documents": [
+    {"id": "synthetic-finra-1200", "content": "SYNTHETIC REGULATORY FIXTURE, NOT VERBATIM LEGAL TEXT: AML monitoring should review transaction patterns supported by explicit evasion facts.", "metadata": {"source": "synthetic_finra_3310_multi.txt", "doc_type": "regulatory_pdf", "section": "synthetic-monitoring"}, "rerank_score": 0.90},
+    {"id": "synthetic-statute-1200", "content": "SYNTHETIC REGULATORY FIXTURE, NOT VERBATIM LEGAL TEXT: Deliberate reporting-threshold evasion may support a structuring concern.", "metadata": {"source": "synthetic_31_usc_5324.txt", "doc_type": "regulatory_pdf", "section": "synthetic-structuring"}, "rerank_score": 0.92}
+  ], "expected_query_contains": ["TXN-SYN-1200", "31 U.S.C. 5324"]}]},
+  "expected": {
+    "extraction": {"transaction_ids": {"match": "exact", "value": ["TXN-SYN-1200", "TXN-SYN-1201"]}, "amount": {"match": "exact", "value": 9600.0}, "transaction_type": {"match": "allowed", "values": ["wire", "wire transfer"]}, "regulations": {"match": "subset", "values": ["FINRA Rule 3310", "31 U.S.C. 5324"]}, "suspected_patterns": {"match": "subset", "values": ["structuring"]}, "jurisdiction": {"match": "exact", "value": null}, "doc_type": {"match": "exact", "value": null}},
+    "aml_assessment": {"risk_rating": {"match": "allowed", "values": ["High", "HIGH"]}, "suspicious_patterns": {"match": "subset", "values": ["structuring"]}, "flagged_transactions": {"match": "exact", "value": ["TXN-SYN-1200", "TXN-SYN-1201"]}, "applicable_regulations": {"match": "subset", "values": ["FINRA Rule 3310", "31 U.S.C. 5324"]}, "insufficient_evidence": {"match": "exact", "value": false}},
+    "critic": {"actions": {"match": "exact", "value": ["GENERATE"]}, "failure_types": {"match": "exact", "value": ["NONE"]}},
+    "report": {"assessment_status": {"match": "exact", "value": "COMPLETE"}, "risk_rating": {"match": "exact", "value": "HIGH"}, "flagged_wires": {"match": "exact", "value": ["TXN-SYN-1200", "TXN-SYN-1201"]}, "applicable_regulations": {"match": "subset", "values": ["FINRA Rule 3310", "31 U.S.C. 5324"]}, "source_document_hashes": {"match": "subset", "values": ["synthetic_finra_3310_multi.txt", "synthetic_31_usc_5324.txt"]}},
+    "execution": {"retrieval_count": {"match": "exact", "value": 1}, "critic_count": {"match": "exact", "value": 1}, "final_loop_count": {"match": "exact", "value": 1}, "terminates": {"match": "exact", "value": true}}
+  },
+  "prohibited": {"transaction_ids": [], "regulations": ["OFAC sanctions screening"], "jurisdictions": ["US_OFAC"], "suspicious_patterns": ["sanctions evasion"], "unsupported_fact_terms": ["offshore", "shell company"]}
+}

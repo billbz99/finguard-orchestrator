@@ -17,6 +17,18 @@ EXPECTED_SCENARIO_IDS = {
     "structuring-clear-001",
     "ordinary-wire-001",
     "insufficient-facts-001",
+    "missing-amount-001",
+    "multiple-ids-001",
+    "ofac-us-001",
+    "jurisdiction-ambiguous-001",
+    "jurisdiction-substrings-001",
+    "missing-regulation-001",
+    "single-refinement-001",
+    "max-loop-001",
+    "multiple-regulations-001",
+    "relevant-rule-benign-facts-001",
+    "conflicting-evidence-001",
+    "hallucination-trap-001",
 }
 
 
@@ -34,14 +46,14 @@ def copied_dataset(tmp_path):
     return destination
 
 
-def test_manifest_and_exactly_three_scenarios_load_successfully():
+def test_manifest_and_exactly_fifteen_scenarios_load_successfully():
     manifest, scenarios = load_golden_dataset()
 
     assert manifest.dataset_id == "finguard-synthetic-aml-golden"
-    assert manifest.dataset_version == "1.0.0"
+    assert manifest.dataset_version == "1.1.0"
     assert manifest.schema_version == "1.0"
     assert manifest.expectation_profile == "aml-golden-v1"
-    assert len(manifest.scenarios) == 3
+    assert len(manifest.scenarios) == 15
     assert {scenario.scenario_id for scenario in scenarios} == EXPECTED_SCENARIO_IDS
 
 

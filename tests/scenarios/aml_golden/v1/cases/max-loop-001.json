@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "max-loop-001",
+  "scenario_version": 1,
+  "title": "Maximum regulatory refinement boundary",
+  "description": "Both synthetic retrieval passes remain inadequate, causing the graph loop guard to stop a repeated retrieval request.",
+  "tags": ["retry", "max-loops", "insufficient-evidence"],
+  "synthetic_data": true,
+  "input": {"query": "Audit synthetic wire TXN-SYN-1100 for a possible structuring and CTR threshold pattern under FINRA Rule 3310.", "amount": 9700.0, "is_cross_border": false, "max_loops": 2},
+  "synthetic_facts": {"transaction_ids": ["TXN-SYN-1100"], "amounts": [9700.0], "transaction_type": "wire", "jurisdictions": [], "counterparties": [], "purpose": "Synthetic pattern review", "time_window": null, "explicitly_absent": ["usable regulatory context", "OFAC match"]},
+  "retrieval": {"passes": [
+    {"documents": [{"id": "synthetic-max-loop-a", "content": "SYNTHETIC REGULATORY FIXTURE: First-pass evidence is unrelated to the requested structuring issue.", "metadata": {"source": "synthetic_max_loop_a.txt", "doc_type": "regulatory_pdf", "section": "unrelated"}, "rerank_score": 0.79}], "expected_query_contains": ["TXN-SYN-1100", "structuring"]},
+    {"documents": [{"id": "synthetic-max-loop-b", "content": "SYNTHETIC REGULATORY FIXTURE: Retry evidence also lacks a usable structuring standard.", "metadata": {"source": "synthetic_max_loop_b.txt", "doc_type": "regulatory_pdf", "section": "unrelated"}, "rerank_score": 0.80}], "expected_query_contains": ["FINRA Rule 3310 structuring", "Currency Transaction Reporting thresholds"]}
+  ]},
+  "expected": {
+    "extraction": {"transaction_ids": {"match": "exact", "value": ["TXN-SYN-1100"]}, "amount": {"match": "exact", "value": 9700.0}, "transaction_type": {"match": "allowed", "values": ["wire", "wire transfer"]}, "regulations": {"match": "subset", "values": ["FINRA Rule 3310"]}, "suspected_patterns": {"match": "subset", "values": ["structuring"]}, "jurisdiction": {"match": "exact", "value": null}, "doc_type": {"match": "exact", "value": null}},
+    "aml_assessment": {"risk_rating": {"match": "allowed", "values": ["Low", "LOW"]}, "suspicious_patterns": {"match": "exact", "value": []}, "flagged_transactions": {"match": "exact", "value": []}, "applicable_regulations": {"match": "exact", "value": []}, "insufficient_evidence": {"match": "exact", "value": true}},
+    "critic": {"actions": {"match": "exact", "value": ["RETRIEVE_MORE", "RETRIEVE_MORE"]}, "failure_types": {"match": "exact", "value": ["MISSING_REGULATORY_CONTEXT", "MISSING_REGULATORY_CONTEXT"]}},
+    "report": {"assessment_status": {"match": "exact", "value": "INSUFFICIENT_EVIDENCE"}, "risk_rating": {"match": "exact", "value": "LOW"}, "flagged_wires": {"match": "exact", "value": []}, "applicable_regulations": {"match": "exact", "value": []}, "source_document_hashes": {"match": "subset", "values": ["synthetic_max_loop_b.txt"]}},
+    "execution": {"retrieval_count": {"match": "exact", "value": 2}, "critic_count": {"match": "exact", "value": 2}, "final_loop_count": {"match": "exact", "value": 2}, "terminates": {"match": "exact", "value": true}}
+  },
+  "prohibited": {"transaction_ids": [], "regulations": ["OFAC sanctions screening"], "jurisdictions": ["US_OFAC"], "suspicious_patterns": ["sanctions evasion"], "unsupported_fact_terms": ["clearance", "offshore", "shell company"]}
+}

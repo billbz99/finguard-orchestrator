@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "conflicting-evidence-001",
+  "scenario_version": 1,
+  "title": "Conflicting synthetic transaction amounts",
+  "description": "The same synthetic wire is described with two incompatible amounts that the current single-amount extraction schema cannot reconcile.",
+  "tags": ["conflicting-evidence", "insufficient-evidence", "schema-limitation"],
+  "synthetic_data": true,
+  "input": {"query": "Review synthetic wire TXN-SYN-1400. One supplied record states $4,500 while another states $14,500 for the same wire, and no source is identified as authoritative.", "amount": null, "is_cross_border": false, "max_loops": 2},
+  "synthetic_facts": {"transaction_ids": ["TXN-SYN-1400"], "amounts": [4500.0, 14500.0], "transaction_type": "wire", "jurisdictions": [], "counterparties": [], "purpose": null, "time_window": null, "explicitly_absent": ["authoritative amount", "counterparty", "jurisdiction", "suspicious pattern"]},
+  "retrieval": {"passes": [{"documents": [{"id": "synthetic-conflict-1400", "content": "SYNTHETIC TRANSACTION FIXTURE: Two records conflict on whether TXN-SYN-1400 is $4,500 or $14,500; neither is authoritative.", "metadata": {"source": "synthetic_conflicting_TXN-SYN-1400.txt", "doc_type": "swift_log", "record_id": "TXN-SYN-1400"}, "rerank_score": 0.89}], "expected_query_contains": ["TXN-SYN-1400", "$4,500", "$14,500"]}]},
+  "expected": {
+    "extraction": {"transaction_ids": {"match": "exact", "value": ["TXN-SYN-1400"]}, "amount": {"match": "allowed", "values": [4500.0, 14500.0]}, "transaction_type": {"match": "allowed", "values": ["wire", "wire transfer"]}, "regulations": {"match": "exact", "value": []}, "suspected_patterns": {"match": "exact", "value": []}, "jurisdiction": {"match": "exact", "value": null}, "doc_type": {"match": "exact", "value": "swift_log"}},
+    "aml_assessment": {"risk_rating": {"match": "allowed", "values": ["Low", "LOW"]}, "suspicious_patterns": {"match": "exact", "value": []}, "flagged_transactions": {"match": "exact", "value": []}, "applicable_regulations": {"match": "exact", "value": []}, "insufficient_evidence": {"match": "exact", "value": true}},
+    "critic": {"actions": {"match": "exact", "value": ["STOP_INSUFFICIENT"]}, "failure_types": {"match": "exact", "value": ["MISSING_TRANSACTION_DATA"]}},
+    "report": {"assessment_status": {"match": "exact", "value": "INSUFFICIENT_EVIDENCE"}, "risk_rating": {"match": "exact", "value": "LOW"}, "flagged_wires": {"match": "exact", "value": []}, "applicable_regulations": {"match": "exact", "value": []}, "source_document_hashes": {"match": "subset", "values": ["synthetic_conflicting_TXN-SYN-1400.txt"]}},
+    "execution": {"retrieval_count": {"match": "exact", "value": 1}, "critic_count": {"match": "exact", "value": 1}, "final_loop_count": {"match": "exact", "value": 1}, "terminates": {"match": "exact", "value": true}}
+  },
+  "prohibited": {"transaction_ids": [], "regulations": [], "jurisdictions": ["US_OFAC"], "suspicious_patterns": ["structuring", "sanctions evasion"], "unsupported_fact_terms": ["authoritative amount", "offshore", "shell company"]}
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "multiple-ids-001",
+  "scenario_version": 1,
+  "title": "Multiple explicit synthetic structuring wires",
+  "description": "Three named synthetic wires are explicitly described as coordinated reporting-threshold evasion.",
+  "tags": ["multiple-transactions", "structuring", "high-risk"],
+  "synthetic_data": true,
+  "input": {"query": "Audit synthetic wires TXN-SYN-500, TXN-SYN-501, and TXN-SYN-502 for structuring. Each $9,900 wire was coordinated within one day to evade CTR reporting under FINRA Rule 3310.", "amount": 9900.0, "is_cross_border": false, "max_loops": 2},
+  "synthetic_facts": {"transaction_ids": ["TXN-SYN-500", "TXN-SYN-501", "TXN-SYN-502"], "amounts": [9900.0, 9900.0, 9900.0], "transaction_type": "wire", "jurisdictions": [], "counterparties": [], "purpose": "Explicitly simulated threshold evasion", "time_window": "one day", "explicitly_absent": ["OFAC match", "foreign jurisdiction"]},
+  "retrieval": {"passes": [{"documents": [{"id": "synthetic-multiple-ids-guidance", "content": "SYNTHETIC REGULATORY FIXTURE, NOT VERBATIM LEGAL TEXT: Coordinated related transfers below a reporting threshold may support a structuring determination when evasion intent is explicit.", "metadata": {"source": "synthetic_multiple_ids_guidance.txt", "doc_type": "regulatory_pdf", "section": "synthetic-structuring"}, "rerank_score": 0.93}], "expected_query_contains": ["TXN-SYN-500", "structuring"]}]},
+  "expected": {
+    "extraction": {"transaction_ids": {"match": "exact", "value": ["TXN-SYN-500", "TXN-SYN-501", "TXN-SYN-502"]}, "amount": {"match": "exact", "value": 9900.0}, "transaction_type": {"match": "allowed", "values": ["wire", "wire transfer"]}, "regulations": {"match": "subset", "values": ["FINRA Rule 3310"]}, "suspected_patterns": {"match": "subset", "values": ["structuring"]}, "jurisdiction": {"match": "exact", "value": null}, "doc_type": {"match": "exact", "value": null}},
+    "aml_assessment": {"risk_rating": {"match": "allowed", "values": ["High", "HIGH"]}, "suspicious_patterns": {"match": "subset", "values": ["structuring"]}, "flagged_transactions": {"match": "exact", "value": ["TXN-SYN-500", "TXN-SYN-501", "TXN-SYN-502"]}, "applicable_regulations": {"match": "subset", "values": ["FINRA Rule 3310"]}, "insufficient_evidence": {"match": "exact", "value": false}},
+    "critic": {"actions": {"match": "exact", "value": ["GENERATE"]}, "failure_types": {"match": "exact", "value": ["NONE"]}},
+    "report": {"assessment_status": {"match": "exact", "value": "COMPLETE"}, "risk_rating": {"match": "exact", "value": "HIGH"}, "flagged_wires": {"match": "exact", "value": ["TXN-SYN-500", "TXN-SYN-501", "TXN-SYN-502"]}, "applicable_regulations": {"match": "subset", "values": ["FINRA Rule 3310"]}, "source_document_hashes": {"match": "subset", "values": ["synthetic_multiple_ids_guidance.txt"]}},
+    "execution": {"retrieval_count": {"match": "exact", "value": 1}, "critic_count": {"match": "exact", "value": 1}, "final_loop_count": {"match": "exact", "value": 1}, "terminates": {"match": "exact", "value": true}}
+  },
+  "prohibited": {"transaction_ids": ["TXN-SYN-599"], "regulations": [], "jurisdictions": ["US_OFAC"], "suspicious_patterns": ["sanctions evasion"], "unsupported_fact_terms": ["offshore", "shell company"]}
+}

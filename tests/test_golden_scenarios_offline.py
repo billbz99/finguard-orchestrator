@@ -14,6 +14,25 @@ from tests.evaluation.scenario_models import (
 )
 
 
+EXPECTED_STATUSES = {
+    "structuring-clear-001": "COMPLETE",
+    "ordinary-wire-001": "COMPLETE",
+    "insufficient-facts-001": "INSUFFICIENT_EVIDENCE",
+    "missing-amount-001": "COMPLETE",
+    "multiple-ids-001": "COMPLETE",
+    "ofac-us-001": "COMPLETE",
+    "jurisdiction-ambiguous-001": "COMPLETE",
+    "jurisdiction-substrings-001": "COMPLETE",
+    "missing-regulation-001": "INSUFFICIENT_EVIDENCE",
+    "single-refinement-001": "COMPLETE",
+    "max-loop-001": "INSUFFICIENT_EVIDENCE",
+    "multiple-regulations-001": "COMPLETE",
+    "relevant-rule-benign-facts-001": "COMPLETE",
+    "conflicting-evidence-001": "INSUFFICIENT_EVIDENCE",
+    "hallucination-trap-001": "INSUFFICIENT_EVIDENCE",
+}
+
+
 @pytest.fixture(scope="module")
 def scenarios_by_id():
     _, scenarios = load_golden_dataset()
@@ -96,11 +115,7 @@ def test_critic_action_sequence_is_order_sensitive():
 
 @pytest.mark.parametrize(
     ("scenario_id", "expected_status"),
-    [
-        ("structuring-clear-001", "COMPLETE"),
-        ("ordinary-wire-001", "COMPLETE"),
-        ("insufficient-facts-001", "INSUFFICIENT_EVIDENCE"),
-    ],
+    EXPECTED_STATUSES.items(),
 )
 def test_all_golden_scenarios_execute_and_pass(
     scenarios_by_id,
@@ -114,9 +129,85 @@ def test_all_golden_scenarios_execute_and_pass(
     assert result.passed is True, result.failed_assertions
     assert result.failed_assertions == []
     assert result.prohibited_violations == []
-    assert result.retrieval_count == 1
-    assert result.critic_count == 1
     assert result.final_status == expected_status
+
+
+@pytest.mark.parametrize(
+    ("scenario_id", "actions", "final_action"),
+    [
+        (
+            "missing-regulation-001",
+            ["RETRIEVE_MORE", "STOP_INSUFFICIENT"],
+            "STOP_INSUFFICIENT",
+        ),
+        (
+            "single-refinement-001",
+            ["RETRIEVE_MORE", "GENERATE"],
+            "GENERATE",
+        ),
+        (
+            "max-loop-001",
+            ["RETRIEVE_MORE", "RETRIEVE_MORE"],
+            "STOP_INSUFFICIENT",
+        ),
+    ],
+)
+def test_retry_scenarios_use_real_graph_cycles(
+    scenarios_by_id,
+    scenario_id,
+    actions,
+    final_action,
+):
+    result = run_offline_replay(scenarios_by_id[scenario_id])
+
+    assert result.passed is True
+    assert result.retrieval_count == 2
+    assert result.critic_count == 2
+    assert result.final_loop_count == 2
+    assert result.critic_actions == actions
+    assert result.final_critic_action == final_action
+
+
+def test_single_refinement_retries_once_then_generates(scenarios_by_id):
+    result = run_offline_replay(scenarios_by_id["single-refinement-001"])
+
+    assert result.critic_actions == ["RETRIEVE_MORE", "GENERATE"]
+    assert result.final_status == "COMPLETE"
+    assert result.final_critic_action == "GENERATE"
+
+
+def test_max_loop_terminates_as_insufficient_evidence(scenarios_by_id):
+    result = run_offline_replay(scenarios_by_id["max-loop-001"])
+
+    assert result.terminated is True
+    assert result.final_status == "INSUFFICIENT_EVIDENCE"
+    assert result.final_critic_action == "STOP_INSUFFICIENT"
+
+
+def test_jurisdiction_substrings_do_not_produce_us_ofac(scenarios_by_id):
+    result = run_offline_replay(scenarios_by_id["jurisdiction-substrings-001"])
+
+    assert result.passed is True
+    assert result.jurisdiction is None
+
+
+def test_hallucination_trap_has_no_prohibited_violations(scenarios_by_id):
+    result = run_offline_replay(scenarios_by_id["hallucination-trap-001"])
+
+    assert result.passed is True
+    assert result.prohibited_violations == []
+
+
+def test_relevant_rule_does_not_make_benign_facts_suspicious(scenarios_by_id):
+    result = run_offline_replay(
+        scenarios_by_id["relevant-rule-benign-facts-001"]
+    )
+
+    assert result.passed is True
+    assert result.final_status == "COMPLETE"
+    assert result.final_risk_rating == "LOW"
+    assert result.flagged_wires == []
+    assert result.suspicious_patterns == []
 
 
 def test_retrieval_query_expectations_are_enforced(scenarios_by_id):

@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "missing-amount-001",
+  "scenario_version": 1,
+  "title": "Supported synthetic wire with no stated amount",
+  "description": "A synthetic commercial wire identifies its parties and purpose but deliberately omits the amount.",
+  "tags": ["missing-amount", "low-risk", "negative-control"],
+  "synthetic_data": true,
+  "input": {"query": "Review synthetic wire TXN-SYN-400 from SYNTHETIC BUYER D to SYNTHETIC SUPPLIER E for invoice INV-SYN-400. No amount was supplied and no related activity was observed.", "amount": null, "is_cross_border": false, "max_loops": 2},
+  "synthetic_facts": {"transaction_ids": ["TXN-SYN-400"], "amounts": [], "transaction_type": "wire", "jurisdictions": [], "counterparties": ["SYNTHETIC BUYER D", "SYNTHETIC SUPPLIER E"], "purpose": "Synthetic invoice INV-SYN-400", "time_window": null, "explicitly_absent": ["amount", "jurisdiction", "suspicious pattern"]},
+  "retrieval": {"passes": [{"documents": [{"id": "synthetic-wire-400", "content": "SYNTHETIC TRANSACTION FIXTURE: TXN-SYN-400 records an invoice payment between named synthetic businesses; the amount is not present.", "metadata": {"source": "synthetic_wire_TXN-SYN-400.txt", "doc_type": "swift_log", "record_id": "TXN-SYN-400"}, "rerank_score": 0.88}], "expected_query_contains": ["TXN-SYN-400"]}]},
+  "expected": {
+    "extraction": {"transaction_ids": {"match": "exact", "value": ["TXN-SYN-400"]}, "amount": {"match": "exact", "value": null}, "transaction_type": {"match": "allowed", "values": ["wire", "wire transfer"]}, "regulations": {"match": "exact", "value": []}, "suspected_patterns": {"match": "exact", "value": []}, "jurisdiction": {"match": "exact", "value": null}, "doc_type": {"match": "exact", "value": "swift_log"}},
+    "aml_assessment": {"risk_rating": {"match": "allowed", "values": ["Low", "LOW"]}, "suspicious_patterns": {"match": "exact", "value": []}, "flagged_transactions": {"match": "exact", "value": []}, "applicable_regulations": {"match": "exact", "value": []}, "insufficient_evidence": {"match": "exact", "value": false}},
+    "critic": {"actions": {"match": "exact", "value": ["GENERATE"]}, "failure_types": {"match": "exact", "value": ["NONE"]}},
+    "report": {"assessment_status": {"match": "exact", "value": "COMPLETE"}, "risk_rating": {"match": "exact", "value": "LOW"}, "flagged_wires": {"match": "exact", "value": []}, "applicable_regulations": {"match": "exact", "value": []}, "source_document_hashes": {"match": "subset", "values": ["synthetic_wire_TXN-SYN-400.txt"]}},
+    "execution": {"retrieval_count": {"match": "exact", "value": 1}, "critic_count": {"match": "exact", "value": 1}, "final_loop_count": {"match": "exact", "value": 1}, "terminates": {"match": "exact", "value": true}}
+  },
+  "prohibited": {"transaction_ids": [], "regulations": [], "jurisdictions": ["US_OFAC"], "suspicious_patterns": ["structuring", "sanctions evasion"], "unsupported_fact_terms": ["$10,000", "offshore", "shell company"]}
+}

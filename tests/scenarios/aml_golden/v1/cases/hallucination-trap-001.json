@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "hallucination-trap-001",
+  "scenario_version": 1,
+  "title": "Sparse synthetic hallucination trap",
+  "description": "Only a synthetic transaction ID is supplied; all commonly hallucinated transaction details are explicitly absent.",
+  "tags": ["hallucination", "insufficient-evidence", "sparse-input"],
+  "synthetic_data": true,
+  "input": {"query": "Review synthetic transaction TXN-SYN-1500.", "amount": null, "is_cross_border": false, "max_loops": 2},
+  "synthetic_facts": {"transaction_ids": ["TXN-SYN-1500"], "amounts": [], "transaction_type": null, "jurisdictions": [], "counterparties": [], "purpose": null, "time_window": null, "explicitly_absent": ["date", "country", "counterparty", "beneficiary country", "additional transaction IDs", "amount", "shell company", "offshore activity", "OFAC match"]},
+  "retrieval": {"passes": [{"documents": [], "expected_query_contains": ["TXN-SYN-1500"]}]},
+  "expected": {
+    "extraction": {"transaction_ids": {"match": "exact", "value": ["TXN-SYN-1500"]}, "amount": {"match": "exact", "value": null}, "transaction_type": {"match": "exact", "value": null}, "regulations": {"match": "exact", "value": []}, "suspected_patterns": {"match": "exact", "value": []}, "jurisdiction": {"match": "exact", "value": null}, "doc_type": {"match": "exact", "value": "swift_log"}},
+    "aml_assessment": {"risk_rating": {"match": "allowed", "values": ["Low", "LOW"]}, "suspicious_patterns": {"match": "exact", "value": []}, "flagged_transactions": {"match": "exact", "value": []}, "applicable_regulations": {"match": "exact", "value": []}, "insufficient_evidence": {"match": "exact", "value": true}},
+    "critic": {"actions": {"match": "exact", "value": ["STOP_INSUFFICIENT"]}, "failure_types": {"match": "exact", "value": ["MISSING_TRANSACTION_DATA"]}},
+    "report": {"assessment_status": {"match": "exact", "value": "INSUFFICIENT_EVIDENCE"}, "risk_rating": {"match": "exact", "value": "LOW"}, "flagged_wires": {"match": "exact", "value": []}, "applicable_regulations": {"match": "exact", "value": []}, "source_document_hashes": {"match": "exact", "value": []}},
+    "execution": {"retrieval_count": {"match": "exact", "value": 1}, "critic_count": {"match": "exact", "value": 1}, "final_loop_count": {"match": "exact", "value": 1}, "terminates": {"match": "exact", "value": true}}
+  },
+  "prohibited": {"transaction_ids": ["TXN-SYN-1501", "TXN-SYN-1502"], "regulations": ["FINRA Rule 3310", "OFAC sanctions screening"], "jurisdictions": ["US_OFAC"], "suspicious_patterns": ["structuring", "sanctions evasion", "terrorist financing"], "unsupported_fact_terms": ["shell company", "offshore", "beneficiary country", "OFAC match", "$10,000", "48 hours"]}
+}
