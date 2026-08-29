@@ -8,6 +8,7 @@ from tests.evaluation.scenario_models import (
     DatasetManifest,
     GoldenScenario,
     SUPPORTED_SCHEMA_VERSION,
+    SUPPORTED_SCHEMA_VERSIONS,
 )
 
 
@@ -40,10 +41,10 @@ def _reject_credential_fields(value: Any, *, location: str) -> None:
 
 
 def _require_supported_schema(version: str, *, location: str) -> None:
-    if version != SUPPORTED_SCHEMA_VERSION:
+    if version not in SUPPORTED_SCHEMA_VERSIONS:
         raise ValueError(
             f"unsupported schema_version '{version}' in {location}; "
-            f"expected '{SUPPORTED_SCHEMA_VERSION}'"
+            f"expected one of {sorted(SUPPORTED_SCHEMA_VERSIONS)}"
         )
 
 

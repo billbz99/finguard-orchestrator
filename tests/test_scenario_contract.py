@@ -11,6 +11,7 @@ from tests.evaluation.loader import (
     load_golden_dataset,
 )
 from tests.evaluation.scenario_models import GoldenScenario
+from tests.evaluation.scenario_models import CriticActionMatcher
 
 
 EXPECTED_SCENARIO_IDS = {
@@ -51,7 +52,7 @@ def test_manifest_and_exactly_fifteen_scenarios_load_successfully():
 
     assert manifest.dataset_id == "finguard-synthetic-aml-golden"
     assert manifest.dataset_version == "1.1.0"
-    assert manifest.schema_version == "1.0"
+    assert manifest.schema_version == "1.1"
     assert manifest.expectation_profile == "aml-golden-v1"
     assert len(manifest.scenarios) == 15
     assert {scenario.scenario_id for scenario in scenarios} == EXPECTED_SCENARIO_IDS
@@ -146,6 +147,47 @@ def test_invalid_expected_assessment_status_fails_validation():
         DEFAULT_DATASET_DIR / "cases" / "ordinary-wire-001.json"
     )
     payload["expected"]["report"]["assessment_status"]["value"] = "UNKNOWN"
+
+    with pytest.raises(ValidationError):
+        GoldenScenario.model_validate(payload)
+
+
+def test_final_stored_action_is_optional_for_legacy_scenarios():
+    payload = read_json(
+        DEFAULT_DATASET_DIR / "cases" / "ordinary-wire-001.json"
+    )
+
+    scenario = GoldenScenario.model_validate(payload)
+
+    assert scenario.expected.critic.final_stored_action is None
+
+
+def test_schema_1_1_final_stored_action_round_trips():
+    payload = read_json(DEFAULT_DATASET_DIR / "cases" / "max-loop-001.json")
+    payload["schema_version"] = "1.1"
+    payload["expected"]["critic"]["final_stored_action"] = {
+        "match": "exact",
+        "value": "STOP_INSUFFICIENT",
+    }
+
+    scenario = GoldenScenario.model_validate(payload)
+    restored = GoldenScenario.model_validate_json(scenario.model_dump_json())
+
+    assert restored == scenario
+    assert restored.expected.critic.final_stored_action == CriticActionMatcher(
+        match="exact",
+        value="STOP_INSUFFICIENT",
+    )
+
+
+@pytest.mark.parametrize("value", ["UNKNOWN", "retrieve_more", 1])
+def test_final_stored_action_rejects_invalid_values(value):
+    payload = read_json(DEFAULT_DATASET_DIR / "cases" / "max-loop-001.json")
+    payload["schema_version"] = "1.1"
+    payload["expected"]["critic"]["final_stored_action"] = {
+        "match": "exact",
+        "value": value,
+    }
 
     with pytest.raises(ValidationError):
         GoldenScenario.model_validate(payload)

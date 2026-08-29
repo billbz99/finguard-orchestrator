@@ -1,7 +1,7 @@
 {
   "dataset_id": "finguard-synthetic-aml-golden",
   "dataset_version": "1.1.0",
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "expectation_profile": "aml-golden-v1",
   "scenarios": [
     {

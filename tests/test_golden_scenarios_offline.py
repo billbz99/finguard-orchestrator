@@ -8,6 +8,7 @@ from tests.evaluation.offline_runner import (
 )
 from tests.evaluation.scenario_models import (
     AllowedMatcher,
+    CriticActionMatcher,
     ExactMatcher,
     RangeMatcher,
     SubsetMatcher,
@@ -182,6 +183,129 @@ def test_max_loop_terminates_as_insufficient_evidence(scenarios_by_id):
     assert result.terminated is True
     assert result.final_status == "INSUFFICIENT_EVIDENCE"
     assert result.final_critic_action == "STOP_INSUFFICIENT"
+
+
+def test_final_stored_action_matches_independently_from_raw_actions(scenarios_by_id):
+    scenario = scenarios_by_id["max-loop-001"].model_copy(deep=True)
+    scenario.schema_version = "1.1"
+    scenario.expected.critic.final_stored_action = CriticActionMatcher(
+        match="exact",
+        value="STOP_INSUFFICIENT",
+    )
+
+    result = run_offline_replay(scenario)
+
+    assert result.passed is True
+    assert result.critic_actions == ["RETRIEVE_MORE", "RETRIEVE_MORE"]
+    assert result.final_critic_action == "STOP_INSUFFICIENT"
+    assert result.metric_contributions[
+        "final_stored_critic_action_accuracy"
+    ].numerator == 1
+
+
+def test_final_stored_action_mismatch_has_distinct_failure(scenarios_by_id):
+    scenario = scenarios_by_id["max-loop-001"].model_copy(deep=True)
+    scenario.schema_version = "1.1"
+    scenario.expected.critic.final_stored_action = CriticActionMatcher(
+        match="exact",
+        value="GENERATE",
+    )
+
+    result = run_offline_replay(scenario)
+
+    assert result.passed is False
+    assert result.critic_actions == ["RETRIEVE_MORE", "RETRIEVE_MORE"]
+    assert any(
+        failure.field == "final_stored_action"
+        for failure in result.failed_assertions
+    )
+    assert not any(
+        failure.field == "critic_actions"
+        for failure in result.failed_assertions
+    )
+
+
+def test_raw_action_mismatch_does_not_imply_stored_action_mismatch(
+    scenarios_by_id,
+):
+    from src.graph.schemas import CriticAssessment
+    from tests.evaluation.evaluation_core import evaluate_scenario
+
+    scenario = scenarios_by_id["max-loop-001"].model_copy(deep=True)
+    scenario.schema_version = "1.1"
+    scenario.expected.critic.actions = ExactMatcher(
+        match="exact",
+        value=["RETRIEVE_MORE", "GENERATE"],
+    )
+    scenario.expected.critic.final_stored_action = CriticActionMatcher(
+        match="exact",
+        value="STOP_INSUFFICIENT",
+    )
+    state = {
+        "jurisdiction": None,
+        "doc_type": None,
+        "extracted_entities": {
+            "transaction_ids": ["TXN-SYN-1100"],
+            "amount": 9700.0,
+            "transaction_type": "wire",
+            "regulations": ["FINRA Rule 3310"],
+            "suspected_patterns": ["structuring"],
+            "jurisdiction": None,
+        },
+        "aml_assessment": {
+            "risk_rating": "Low",
+            "suspicious_patterns": [],
+            "flagged_transactions": [],
+            "applicable_regulations": [],
+            "reasoning_summary": "Synthetic assessment.",
+            "insufficient_evidence": True,
+        },
+        "critic_assessment": {"recommended_action": "STOP_INSUFFICIENT"},
+        "loop_count": 2,
+        "final_report": {
+            "assessment_status": "INSUFFICIENT_EVIDENCE",
+            "risk_rating": "LOW",
+            "flagged_wires": [],
+            "applicable_regulations": [],
+            "source_document_hashes": ["synthetic_max_loop_b.txt"],
+            "audit_summary": "Synthetic assessment.",
+        },
+    }
+    critics = [
+        CriticAssessment(
+            is_sufficient=False,
+            missing_evidence=[],
+            failure_type="MISSING_REGULATORY_CONTEXT",
+            recommended_action="RETRIEVE_MORE",
+            critique="More context required.",
+        ),
+        CriticAssessment(
+            is_sufficient=False,
+            missing_evidence=[],
+            failure_type="MISSING_REGULATORY_CONTEXT",
+            recommended_action="RETRIEVE_MORE",
+            critique="More context still required.",
+        ),
+    ]
+    queries = [
+        scenario.input.query,
+        scenario.input.query
+        + " FINRA Rule 3310 structuring Currency Transaction Reporting thresholds",
+    ]
+
+    result = evaluate_scenario(
+        scenario,
+        state,
+        critics,
+        queries,
+        execution_mode="offline_replay",
+    )
+
+    assert any(failure.field == "critic_actions" for failure in result.failed_assertions)
+    assert not any(
+        failure.field == "final_stored_action"
+        for failure in result.failed_assertions
+    )
 
 
 def test_jurisdiction_substrings_do_not_produce_us_ofac(scenarios_by_id):

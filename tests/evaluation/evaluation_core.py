@@ -95,6 +95,12 @@ def semantic_metric_contributions(scenario, state, critic_actions, violations):
         "critic_count_accuracy": _binary_metric("critic_count", scenario.expected.execution.critic_count, len(critic_actions)),
         "prohibited_output_violation_rate": MetricContribution(numerator=int(bool(violations)), denominator=1),
     }
+    if scenario.expected.critic.final_stored_action is not None:
+        contributions["final_stored_critic_action_accuracy"] = _binary_metric(
+            "final_stored_action",
+            scenario.expected.critic.final_stored_action,
+            (state.get("critic_assessment") or {}).get("recommended_action"),
+        )
     if expected_ids is not None:
         expected_set = set(expected_ids)
         actual_set = set(actual_ids)
@@ -167,6 +173,13 @@ def evaluate_scenario(scenario, state, critic_responses, retrieval_queries, *, e
     failure_types = [r.failure_type for r in critic_responses]
     count += _add_match(failures, "critic_actions", scenario.expected.critic.actions, actions, order_sensitive=True)
     count += _add_match(failures, "failure_types", scenario.expected.critic.failure_types, failure_types, order_sensitive=True)
+    if scenario.expected.critic.final_stored_action is not None:
+        count += _add_match(
+            failures,
+            "final_stored_action",
+            scenario.expected.critic.final_stored_action,
+            (state.get("critic_assessment") or {}).get("recommended_action"),
+        )
     report = state.get("final_report") or {}
     for field in ("assessment_status", "risk_rating", "flagged_wires", "applicable_regulations", "source_document_hashes"):
         count += _add_match(failures, field, getattr(scenario.expected.report, field), report.get(field))

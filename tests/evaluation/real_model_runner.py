@@ -103,6 +103,7 @@ class AggregateSemanticMetrics(BaseModel):
     jurisdiction_accuracy: MetricSummary
     doc_type_accuracy: MetricSummary
     critic_action_sequence_accuracy: MetricSummary
+    final_stored_critic_action_accuracy: MetricSummary
     retry_routing_accuracy: MetricSummary
     retrieval_count_accuracy: MetricSummary
     critic_count_accuracy: MetricSummary
@@ -270,6 +271,7 @@ def _aggregate_semantic_metrics(results, scenarios_requested):
         jurisdiction_accuracy=contribution("jurisdiction_accuracy"),
         doc_type_accuracy=contribution("doc_type_accuracy"),
         critic_action_sequence_accuracy=contribution("critic_action_sequence_accuracy"),
+        final_stored_critic_action_accuracy=contribution("final_stored_critic_action_accuracy"),
         retry_routing_accuracy=contribution("retry_routing_accuracy"),
         retrieval_count_accuracy=contribution("retrieval_count_accuracy"),
         critic_count_accuracy=contribution("critic_count_accuracy"),

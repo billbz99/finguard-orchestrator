@@ -5,8 +5,10 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-SUPPORTED_SCHEMA_VERSION = "1.0"
+SUPPORTED_SCHEMA_VERSION = "1.1"
+SUPPORTED_SCHEMA_VERSIONS = frozenset({"1.0", "1.1"})
 AssessmentStatus = Literal["COMPLETE", "INSUFFICIENT_EVIDENCE"]
+CriticAction = Literal["GENERATE", "RETRIEVE_MORE", "STOP_INSUFFICIENT"]
 
 
 class StrictModel(BaseModel):
@@ -49,6 +51,11 @@ Matcher = Annotated[
 class AssessmentStatusMatcher(StrictModel):
     match: Literal["exact"]
     value: AssessmentStatus
+
+
+class CriticActionMatcher(StrictModel):
+    match: Literal["exact"]
+    value: CriticAction
 
 
 class ScenarioReference(StrictModel):
@@ -119,6 +126,7 @@ class AMLAssessmentExpectation(StrictModel):
 class CriticExpectation(StrictModel):
     actions: Matcher
     failure_types: Matcher
+    final_stored_action: CriticActionMatcher | None = None
 
 
 class ReportExpectation(StrictModel):

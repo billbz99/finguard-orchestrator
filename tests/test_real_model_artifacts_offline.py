@@ -13,6 +13,7 @@ from tests.evaluation.real_model_runner import (
     build_run_artifact,
     run_controlled_scenario,
 )
+from tests.evaluation.scenario_models import CriticActionMatcher
 
 
 class FakeStructuredClient:
@@ -245,3 +246,42 @@ def test_full_artifact_round_trips_without_secrets(monkeypatch):
     assert "SENTINEL-SECRET-KEY" not in payload
     assert "authorization" not in payload.casefold()
     json.loads(payload)
+
+
+def test_final_stored_action_metric_uses_only_explicit_expectations():
+    manifest, scenarios = scenarios_by_id()
+    legacy = scenarios["ordinary-wire-001"]
+    boundary = scenarios["max-loop-001"].model_copy(deep=True)
+    boundary.schema_version = "1.1"
+    boundary.expected.critic.final_stored_action = CriticActionMatcher(
+        match="exact",
+        value="STOP_INSUFFICIENT",
+    )
+    results = [
+        run_controlled_scenario(legacy, scenario_client(legacy)),
+        run_controlled_scenario(boundary, scenario_client(boundary)),
+    ]
+
+    metric = build_artifact(manifest, results).aggregate_metrics
+
+    assert metric.final_stored_critic_action_accuracy.model_dump() == {
+        "numerator": 1,
+        "denominator": 1,
+        "value": 1.0,
+    }
+
+
+def test_final_stored_action_metric_is_null_without_explicit_expectations():
+    manifest, scenarios = scenarios_by_id()
+    legacy = scenarios["ordinary-wire-001"]
+
+    metric = build_artifact(
+        manifest,
+        [run_controlled_scenario(legacy, scenario_client(legacy))],
+    ).aggregate_metrics
+
+    assert metric.final_stored_critic_action_accuracy.model_dump() == {
+        "numerator": 0,
+        "denominator": 0,
+        "value": None,
+    }

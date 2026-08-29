@@ -6,6 +6,7 @@ from typing import Any
 from tests.evaluation.scenario_models import (
     AllowedMatcher,
     AssessmentStatusMatcher,
+    CriticActionMatcher,
     ExactMatcher,
     Matcher,
     RangeMatcher,
@@ -69,7 +70,10 @@ def match_value(
     """Evaluates one declared matcher with narrow deterministic normalization."""
     normalized_actual = _normalized_values(field, actual)
 
-    if isinstance(matcher, (ExactMatcher, AssessmentStatusMatcher)):
+    if isinstance(
+        matcher,
+        (ExactMatcher, AssessmentStatusMatcher, CriticActionMatcher),
+    ):
         expected = _normalized_values(field, matcher.value)
         if isinstance(expected, list) and isinstance(normalized_actual, list):
             passed = (
