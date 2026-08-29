@@ -68,6 +68,19 @@ FinGuard Orchestrator is an autonomous, multi-agent compliance auditing system d
   - **LangSmith Distributed Tracing**: Granular execution tracking with custom metadata (`client_tier`, `audit_id`, `batch_wire_count`).
   - **DeepEval CI/CD Quality Gates**: Automated evaluation harness testing for **Faithfulness**, **Answer Relevancy**, and **Context Precision**.
 
+### Assessment Status vs. Risk
+
+Every compliance report includes a required `assessment_status` separate from its
+`risk_rating`:
+
+- `COMPLETE`: FinGuard had sufficient evidence to complete the AML assessment.
+- `INSUFFICIENT_EVIDENCE`: the workflow terminated without enough evidence for a
+  supported AML conclusion.
+
+A `LOW` risk rating is not a clearance when `assessment_status` is
+`INSUFFICIENT_EVIDENCE`. Consumers should interpret assessment status before
+displaying or acting on the risk rating.
+
 ---
 
 ## ⚖️ Key Architectural Decisions & Trade-offs

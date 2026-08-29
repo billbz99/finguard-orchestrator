@@ -9,6 +9,7 @@ def run_deterministic_ach_check(transaction_data: Dict[str, Any]) -> Dict[str, A
     Costs $0.00 in LLM API tokens.
     """
     return {
+        "assessment_status": "COMPLETE",
         "risk_rating": "LOW",
         "flagged_wires": [],
         "applicable_regulations": ["Standard ACH Compliance Rules"],

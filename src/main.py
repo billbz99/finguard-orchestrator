@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 from src.graph.workflow import build_finguard_graph
 from src.graph.pre_router import route_incoming_audit, run_deterministic_ach_check
+from src.graph.schemas import has_valid_assessment_status
 from src.utils.cache import get_semantic_cache, set_semantic_cache
 
 load_dotenv()
@@ -48,7 +49,7 @@ async def execute_audit(request: AuditRequest):
     
     # 1. Check Redis / In-Memory Semantic Cache
     cached_report = get_semantic_cache(request.query, threshold=0.80)
-    if cached_report:
+    if cached_report and has_valid_assessment_status(cached_report):
         latency = (time.time() - start_time) * 1000
         return AuditResponse(
             status="SUCCESS",

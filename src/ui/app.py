@@ -4,6 +4,7 @@ import time
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
+from src.graph.schemas import has_valid_assessment_status
 
 load_dotenv()
 
@@ -91,7 +92,7 @@ if run_audit and query:
     # 1. Check Semantic Cache
     cached_report = get_semantic_cache(query, threshold=0.80)
     
-    if cached_report:
+    if cached_report and has_valid_assessment_status(cached_report):
         cache_status = "CACHE HIT 🟢"
         final_report = cached_report
         latency = (time.time() - start_time) * 1000
@@ -138,11 +139,23 @@ if run_audit and query:
     st.markdown("---")
     st.subheader("📋 Compliance Summary Report")
     
+    assessment_status = final_report.get("assessment_status")
     risk = final_report.get("risk_rating", "LOW")
-    if risk == "HIGH":
-        st.markdown('### Risk Assessment: <span class="badge-high">HIGH RISK</span>', unsafe_allow_html=True)
+    if assessment_status == "INSUFFICIENT_EVIDENCE":
+        st.warning(
+            "Assessment status: INSUFFICIENT EVIDENCE. FinGuard could not reach "
+            "a supported AML conclusion; the risk rating is not a clearance."
+        )
+    elif assessment_status == "COMPLETE":
+        if risk == "HIGH":
+            st.markdown('### Risk Assessment: <span class="badge-high">HIGH RISK</span>', unsafe_allow_html=True)
+        else:
+            st.markdown('### Risk Assessment: <span class="badge-low">LOW RISK</span>', unsafe_allow_html=True)
     else:
-        st.markdown('### Risk Assessment: <span class="badge-low">LOW RISK</span>', unsafe_allow_html=True)
+        st.error(
+            "Assessment status is missing or invalid. Do not interpret this report "
+            "as a completed AML assessment."
+        )
 
     c1, c2 = st.columns([1, 2])
     with c1:

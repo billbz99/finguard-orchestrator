@@ -1,7 +1,20 @@
 # src/graph/schemas.py
 
-from typing import List
+from collections.abc import Mapping
+from typing import List, Literal
 from pydantic import BaseModel, Field
+
+
+AssessmentStatus = Literal["COMPLETE", "INSUFFICIENT_EVIDENCE"]
+VALID_ASSESSMENT_STATUSES = frozenset({"COMPLETE", "INSUFFICIENT_EVIDENCE"})
+
+
+def has_valid_assessment_status(report: object) -> bool:
+    """Returns whether a report carries a current assessment-status value."""
+    return (
+        isinstance(report, Mapping)
+        and report.get("assessment_status") in VALID_ASSESSMENT_STATUSES
+    )
 
 
 class TransactionExtraction(BaseModel):
@@ -39,6 +52,9 @@ class TransactionExtraction(BaseModel):
 
 class ComplianceReport(BaseModel):
     """Pydantic schema for structured Suspicious Activity Report (SAR) generation."""
+    assessment_status: AssessmentStatus = Field(
+        description="Whether the AML assessment completed or lacked sufficient evidence"
+    )
     risk_rating: str = Field(
         description="Low, Medium, or High Risk Assessment of transaction run"
     )

@@ -75,7 +75,7 @@ docker run -p 8000:8000 --env-file .env finguard-orchestrator:latest
 - Follow the surrounding Python style: four-space indentation, descriptive snake_case names, type annotations on public functions and state/report shapes, and short docstrings for non-obvious behavior.
 - Target Python 3.11+. Prefer built-in generics and `X | None` in new code, but do not churn existing `typing.List`, `Dict`, or `Optional` annotations solely for style.
 - Use `pathlib.Path` for filesystem work where practical. Keep paths project-relative at application boundaries unless an existing interface requires strings.
-- Keep API and persisted output field names stable. The UI, cache, API response, tests, and graph share report keys such as `risk_rating`, `flagged_wires`, and `source_document_hashes`.
+- Keep API and persisted output field names stable. The UI, cache, API response, tests, and graph share report keys including `assessment_status`, `risk_rating`, `flagged_wires`, and `source_document_hashes`. `assessment_status` is required and must remain distinct from risk: `INSUFFICIENT_EVIDENCE` is not an ordinary low-risk clearance.
 - Do not hide failures broadly. Existing optional Redis behavior intentionally falls back, but new error handling should distinguish expected optional-service failures from application defects.
 - Avoid import-time network/model work in new modules. Be aware that current imports of `src.main`, `src.utils.cache`, vector-store classes, and retrieval classes may initialize graphs, local models, Redis checks, Chroma clients, or model downloads.
 
@@ -97,6 +97,7 @@ docker run -p 8000:8000 --env-file .env finguard-orchestrator:latest
 - Prompts must keep analysis evidence-grounded: extract only facts explicitly present, distinguish regulatory relevance from proof of suspicious behavior, do not invent transaction details, and signal insufficient evidence when facts do not support a conclusion.
 - Treat critic vocabulary (`NONE`, `MISSING_TRANSACTION_DATA`, `MISSING_REGULATORY_CONTEXT`, `INCONSISTENT_ANALYSIS`; `GENERATE`, `RETRIEVE_MORE`, `STOP_INSUFFICIENT`) and report risk values as public internal contracts. If stricter validation such as enums is introduced, do so as an intentional behavior change with tests and migration of all callers.
 - Final report construction is currently deterministic from the validated AML assessment and retrieved metadata. Preserve uppercase final `risk_rating` and stable report keys.
+- Preserve the final report status contract: `COMPLETE` means the assessment reached a supported conclusion, while `INSUFFICIENT_EVIDENCE` means it did not. Never infer `COMPLETE` for legacy cached reports that lack `assessment_status`.
 - Keep tracing metadata free of secrets and sensitive transaction payloads. The current API supplies tags plus `client_tier`, `audit_id`, and `batch_wire_count`.
 
 ## RAG and retrieval conventions

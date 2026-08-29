@@ -261,6 +261,17 @@ def structured_generation_node(state: AgentState) -> Dict[str, Any]:
 
     context = state.get("retrieved_context", [])
     assessment = state.get("aml_assessment") or {}
+    critic = state.get("critic_assessment") or {}
+
+    critic_action = critic.get("recommended_action")
+    if critic_action == "STOP_INSUFFICIENT":
+        assessment_status = "INSUFFICIENT_EVIDENCE"
+    elif critic_action == "GENERATE":
+        assessment_status = "COMPLETE"
+    elif assessment.get("insufficient_evidence", True):
+        assessment_status = "INSUFFICIENT_EVIDENCE"
+    else:
+        assessment_status = "COMPLETE"
 
     risk_rating = assessment.get("risk_rating", "Low")
 
@@ -285,6 +296,7 @@ def structured_generation_node(state: AgentState) -> Dict[str, Any]:
     })
 
     report = ComplianceReport(
+        assessment_status=assessment_status,
         risk_rating=risk_rating.upper(),
         flagged_wires=flagged_wires,
         applicable_regulations=regulations,

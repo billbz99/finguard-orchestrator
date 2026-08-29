@@ -77,6 +77,7 @@ if __name__ == "__main__":
     print("🧪 Testing Semantic Cache System...\n")
 
     dummy_report = {
+        "assessment_status": "COMPLETE",
         "risk_rating": "HIGH",
         "flagged_wires": ["TXN-984211-X"],
         "applicable_regulations": ["FINRA Rule 3310"],
