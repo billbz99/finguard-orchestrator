@@ -30,10 +30,10 @@ def route_incoming_audit(raw_query: str, amount: Optional[float] = None, is_cros
     )
 
     if requires_escalation:
-        print("⚡ [Pre-Router] Escalating request to LangGraph Agentic Core (Cyclic Reasoning).")
+        print("[Pre-Router] Escalating request to LangGraph Agentic Core (Cyclic Reasoning).")
         return "AGENTIC_GRAPH"
     else:
-        print("⚡ [Pre-Router] Routing to Deterministic ACH Parser ($0.00 API Token Cost).")
+        print("[Pre-Router] Routing to Deterministic ACH Parser ($0.00 API Token Cost).")
         return "DETERMINISTIC_PASS"
 
 

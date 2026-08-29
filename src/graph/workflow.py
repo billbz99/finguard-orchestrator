@@ -21,19 +21,19 @@ def should_continue_audit(state: AgentState) -> str:
 
     if action == "RETRIEVE_MORE":
         print(
-            "🔄 [Routing] Critic requested additional regulatory retrieval."
+            "[Routing] Critic requested additional regulatory retrieval."
         )
         return "refine"
 
     if action == "STOP_INSUFFICIENT":
         print(
-            "🛑 [Routing] Missing transaction evidence. "
+            "[Routing] Missing transaction evidence. "
             "Finalizing with insufficient evidence."
         )
         return "generate"
 
     print(
-        "➡️ [Routing] Evidence sufficient. "
+        "[Routing] Evidence sufficient. "
         "Proceeding to generation."
     )
     return "generate"
@@ -102,10 +102,10 @@ if __name__ == "__main__":
         },
     }
 
-    print("🚀 Executing FinGuard Agentic Graph Workflow with LangSmith Tracing...\n")
+    print("Executing FinGuard Agentic Graph Workflow with LangSmith Tracing...\n")
     output = app.invoke(initial_state, config=config)
 
     print("\n" + "=" * 50)
-    print("📋 FINAL STRUCTURED COMPLIANCE REPORT (JSON)")
+    print("FINAL STRUCTURED COMPLIANCE REPORT (JSON)")
     print("=" * 50)
     print(json.dumps(output["final_report"], indent=2))

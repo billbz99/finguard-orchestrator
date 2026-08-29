@@ -69,10 +69,10 @@ def extraction_node(state: AgentState) -> Dict[str, Any]:
     extracted_entities = extraction.model_dump()
 
     print(
-        f"🔹 [Extraction Node] "
+        f"[Extraction Node] "
         f"doc_type='{doc_type}', "
         f"jurisdiction='{jurisdiction}', "
-        f"entities={extracted_entities}"
+        f"entities={extracted_entities!a}"
     )
 
     return {
@@ -85,7 +85,7 @@ def aml_audit_node(state: AgentState) -> Dict[str, Any]:
     """Executes vector retrieval against ChromaDB and performs AML reasoning."""
 
     print(
-        f"🔍 [AML Audit Node] Querying vector store "
+        f"[AML Audit Node] Querying vector store "
         f"(Loop {state.get('loop_count', 0)})..."
     )
 
@@ -119,7 +119,7 @@ def aml_audit_node(state: AgentState) -> Dict[str, Any]:
     ]
 
     print(
-        f"✅ [AML Audit Node] Found {len(valid_chunks)} "
+        f"[AML Audit Node] Found {len(valid_chunks)} "
         f"context chunks passing confidence threshold."
     )
 
@@ -160,8 +160,8 @@ def aml_audit_node(state: AgentState) -> Dict[str, Any]:
     )
 
     print(
-        f"🧠 [AML Reasoning] Assessment: "
-        f"{assessment.model_dump()}"
+        f"[AML Reasoning] Assessment: "
+        f"{assessment.model_dump()!a}"
     )
 
     return {
@@ -242,10 +242,10 @@ def auditor_critic_node(state: AgentState) -> Dict[str, Any]:
     loop_count = current_loop + 1
 
     print(
-        f"⚖️ [Auditor Critic] "
-        f"Failure Type: {critic['failure_type']} | "
-        f"Action: {critic['recommended_action']} | "
-        f"Missing: {critic['missing_evidence']} | "
+        f"[Auditor Critic] "
+        f"Failure Type: {critic['failure_type']!a} | "
+        f"Action: {critic['recommended_action']!a} | "
+        f"Missing: {critic['missing_evidence']!a} | "
         f"Loop {loop_count}/{max_loops}"
     )
 
@@ -305,8 +305,8 @@ def structured_generation_node(state: AgentState) -> Dict[str, Any]:
     )
 
     print(
-        f"📝 [Generation Node] ComplianceReport created successfully "
-        f"with Risk Rating: {report.risk_rating}"
+        f"[Generation Node] ComplianceReport created successfully "
+        f"with Risk Rating: {report.risk_rating!a}"
     )
 
     return {
