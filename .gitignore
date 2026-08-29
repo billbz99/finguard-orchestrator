@@ -25,3 +25,4 @@ data/test_chroma/
 *.bin
 data/raw/
 *.csv
+artifacts/evaluations/
