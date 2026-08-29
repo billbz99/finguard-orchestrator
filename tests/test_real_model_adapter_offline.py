@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import json
 from collections import defaultdict, deque
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -156,7 +157,13 @@ def test_unexpected_extra_retrieval_is_semantic_mismatch(ordinary):
 def test_artifact_contains_metadata_and_excludes_secrets(tmp_path, dataset, ordinary, monkeypatch):
     monkeypatch.setenv("XAI_API_KEY", "SENTINEL-SECRET-KEY")
     result = run_controlled_scenario(ordinary, FakeClient(normal_responses()))
-    artifact = build_run_artifact(dataset[0], [result], provider="xAI", model="fake")
+    artifact = build_run_artifact(
+        dataset[0],
+        [result],
+        provider="xAI",
+        model="fake",
+        started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
     path = write_artifact(artifact, tmp_path / "run.json")
     payload = path.read_text(encoding="utf-8")
     assert artifact.dataset_id in payload and ordinary.scenario_id in payload

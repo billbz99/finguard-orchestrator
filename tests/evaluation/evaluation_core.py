@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from src.graph.schemas import CriticAssessment
 from tests.evaluation.matchers import MatchResult, match_value
-from tests.evaluation.scenario_models import GoldenScenario
+from tests.evaluation.scenario_models import ExactMatcher, GoldenScenario, SubsetMatcher
 
 
 class EvaluationFailure(BaseModel):
@@ -46,6 +46,62 @@ class ScenarioEvaluationResult(BaseModel):
     final_risk_rating: str | None
     flagged_wires: list[str]
     suspicious_patterns: list[str]
+    metric_contributions: dict[str, "MetricContribution"] = Field(default_factory=dict)
+
+
+class MetricContribution(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    numerator: int = Field(ge=0)
+    denominator: int = Field(ge=0)
+
+
+def _binary_metric(field, matcher, actual, *, order_sensitive=False):
+    result = match_value(field, matcher, actual, order_sensitive=order_sensitive)
+    return MetricContribution(numerator=int(result.passed), denominator=1)
+
+
+def _expected_list(matcher) -> list[Any] | None:
+    if isinstance(matcher, ExactMatcher) and isinstance(matcher.value, list):
+        return matcher.value
+    if isinstance(matcher, SubsetMatcher):
+        return matcher.values
+    return None
+
+
+def semantic_metric_contributions(scenario, state, critic_actions, violations):
+    extraction = state.get("extracted_entities") or {}
+    assessment = state.get("aml_assessment") or {}
+    report = state.get("final_report") or {}
+    expected_ids = _expected_list(scenario.expected.extraction.transaction_ids)
+    actual_ids = extraction.get("transaction_ids") or []
+    contributions = {
+        "assessment_status_accuracy": _binary_metric("assessment_status", scenario.expected.report.assessment_status, report.get("assessment_status")),
+        "risk_accuracy": _binary_metric("risk_rating", scenario.expected.report.risk_rating, report.get("risk_rating")),
+        "insufficient_evidence_accuracy": _binary_metric("insufficient_evidence", scenario.expected.aml_assessment.insufficient_evidence, assessment.get("insufficient_evidence")),
+        "transaction_id_exact_match": _binary_metric("transaction_ids", scenario.expected.extraction.transaction_ids, actual_ids),
+        "regulation_matching": _binary_metric("applicable_regulations", scenario.expected.aml_assessment.applicable_regulations, assessment.get("applicable_regulations")),
+        "suspicious_pattern_matching": _binary_metric("suspicious_patterns", scenario.expected.aml_assessment.suspicious_patterns, assessment.get("suspicious_patterns")),
+        "jurisdiction_accuracy": _binary_metric("jurisdiction", scenario.expected.extraction.jurisdiction, state.get("jurisdiction")),
+        "doc_type_accuracy": _binary_metric("doc_type", scenario.expected.extraction.doc_type, state.get("doc_type")),
+        "critic_action_sequence_accuracy": _binary_metric("critic_actions", scenario.expected.critic.actions, critic_actions, order_sensitive=True),
+        "retry_routing_accuracy": MetricContribution(
+            numerator=int(
+                (_expected_list(scenario.expected.critic.actions) or []).count("RETRIEVE_MORE")
+                == critic_actions.count("RETRIEVE_MORE")
+            ),
+            denominator=1,
+        ),
+        "retrieval_count_accuracy": _binary_metric("retrieval_count", scenario.expected.execution.retrieval_count, len(state.get("_evaluation_retrieval_queries", []))),
+        "critic_count_accuracy": _binary_metric("critic_count", scenario.expected.execution.critic_count, len(critic_actions)),
+        "prohibited_output_violation_rate": MetricContribution(numerator=int(bool(violations)), denominator=1),
+    }
+    if expected_ids is not None:
+        expected_set = set(expected_ids)
+        actual_set = set(actual_ids)
+        true_positives = len(expected_set & actual_set)
+        contributions["transaction_id_precision"] = MetricContribution(numerator=true_positives, denominator=len(actual_set))
+        contributions["transaction_id_recall"] = MetricContribution(numerator=true_positives, denominator=len(expected_set))
+    return contributions
 
 
 def initial_state(scenario: GoldenScenario) -> dict[str, Any]:
@@ -124,6 +180,11 @@ def evaluate_scenario(scenario, state, critic_responses, retrieval_queries, *, e
             if query is None or term not in query:
                 failures.append(EvaluationFailure(field=f"retrieval_queries[{index}]", matcher="contains", expected=term, actual=query, message=f"retrieval query {index} did not contain {term!r}"))
     violations = evaluate_prohibited_outcomes(scenario, state, critic_responses)
+    metric_state = dict(state)
+    metric_state["_evaluation_retrieval_queries"] = retrieval_queries
+    metric_contributions = semantic_metric_contributions(
+        scenario, metric_state, actions, violations
+    )
     return ScenarioEvaluationResult(
         scenario_id=scenario.scenario_id, scenario_version=scenario.scenario_version,
         execution_mode=execution_mode, passed=not failures and not violations,
@@ -135,4 +196,5 @@ def evaluate_scenario(scenario, state, critic_responses, retrieval_queries, *, e
         final_critic_action=(state.get("critic_assessment") or {}).get("recommended_action"),
         jurisdiction=state.get("jurisdiction"), final_risk_rating=report.get("risk_rating"),
         flagged_wires=report.get("flagged_wires", []), suspicious_patterns=assessment.get("suspicious_patterns", []),
+        metric_contributions=metric_contributions,
     )

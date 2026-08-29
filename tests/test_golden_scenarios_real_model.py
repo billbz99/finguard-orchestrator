@@ -1,6 +1,7 @@
 """Explicitly opt-in paid entry point for controlled-retrieval evaluation."""
 
 import os
+from datetime import datetime, timezone
 
 import pytest
 
@@ -28,8 +29,16 @@ def test_selected_golden_scenarios_with_real_model():
         f"provider=xAI model={model} scenarios={selected_ids} "
         f"maximum_calls={len(selected_ids) * 5}"
     )
+    started_at = datetime.now(timezone.utc)
     results = [run_controlled_scenario(by_id[scenario_id], get_llm()) for scenario_id in selected_ids]
-    artifact = build_run_artifact(manifest, results, provider="xAI", model=model)
+    artifact = build_run_artifact(
+        manifest,
+        results,
+        provider="xAI",
+        model=model,
+        started_at=started_at,
+        selected_scenario_ids=selected_ids,
+    )
     write_artifact(artifact, f"artifacts/evaluations/{artifact.run_id}.json")
     failures = [result for result in results if result.status != "passed"]
     assert not failures, [result.model_dump() for result in failures]
