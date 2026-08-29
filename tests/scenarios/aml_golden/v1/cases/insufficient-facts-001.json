@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "insufficient-facts-001",
+  "scenario_version": 1,
+  "title": "Synthetic transaction ID without supporting facts",
+  "description": "A deliberately sparse synthetic request contains only a transaction identifier and asks for review.",
+  "tags": ["insufficient-evidence", "missing-transaction-data", "negative-control"],
+  "synthetic_data": true,
+  "input": {
+    "query": "Review synthetic transaction TXN-SYN-300.",
+    "amount": null,
+    "is_cross_border": false,
+    "max_loops": 2
+  },
+  "synthetic_facts": {
+    "transaction_ids": ["TXN-SYN-300"],
+    "amounts": [],
+    "transaction_type": null,
+    "jurisdictions": [],
+    "counterparties": [],
+    "purpose": null,
+    "time_window": null,
+    "explicitly_absent": ["amount", "counterparty", "jurisdiction", "transaction history", "suspicious behavior", "regulatory reference"]
+  },
+  "retrieval": {
+    "passes": [
+      {
+        "documents": [],
+        "expected_query_contains": ["TXN-SYN-300"]
+      }
+    ]
+  },
+  "expected": {
+    "extraction": {
+      "transaction_ids": {"match": "exact", "value": ["TXN-SYN-300"]},
+      "amount": {"match": "exact", "value": null},
+      "transaction_type": {"match": "exact", "value": null},
+      "regulations": {"match": "exact", "value": []},
+      "suspected_patterns": {"match": "exact", "value": []},
+      "jurisdiction": {"match": "exact", "value": null},
+      "doc_type": {"match": "exact", "value": "swift_log"}
+    },
+    "aml_assessment": {
+      "risk_rating": {"match": "allowed", "values": ["Low", "LOW"]},
+      "suspicious_patterns": {"match": "exact", "value": []},
+      "flagged_transactions": {"match": "exact", "value": []},
+      "applicable_regulations": {"match": "exact", "value": []},
+      "insufficient_evidence": {"match": "exact", "value": true}
+    },
+    "critic": {
+      "actions": {"match": "exact", "value": ["STOP_INSUFFICIENT"]},
+      "failure_types": {"match": "exact", "value": ["MISSING_TRANSACTION_DATA"]}
+    },
+    "report": {
+      "assessment_status": {"match": "exact", "value": "INSUFFICIENT_EVIDENCE"},
+      "risk_rating": {"match": "exact", "value": "LOW"},
+      "flagged_wires": {"match": "exact", "value": []},
+      "applicable_regulations": {"match": "exact", "value": []},
+      "source_document_hashes": {"match": "exact", "value": []}
+    },
+    "execution": {
+      "retrieval_count": {"match": "exact", "value": 1},
+      "critic_count": {"match": "exact", "value": 1},
+      "final_loop_count": {"match": "exact", "value": 1},
+      "terminates": {"match": "exact", "value": true}
+    }
+  },
+  "prohibited": {
+    "transaction_ids": [],
+    "regulations": ["FINRA Rule 3310", "31 U.S.C. 5324"],
+    "jurisdictions": ["US_OFAC"],
+    "suspicious_patterns": ["structuring", "sanctions evasion", "terrorist financing"],
+    "unsupported_fact_terms": ["$10,000", "offshore", "counterparty", "48 hours", "cash deposit"]
+  }
+}

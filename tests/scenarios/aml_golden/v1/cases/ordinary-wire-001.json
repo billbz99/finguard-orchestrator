@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "ordinary-wire-001",
+  "scenario_version": 1,
+  "title": "Ordinary supported synthetic commercial wire",
+  "description": "A fully described synthetic domestic commercial wire has a documented invoice purpose and no suspicious behavior.",
+  "tags": ["ordinary-wire", "low-risk", "sufficient-evidence", "negative-control"],
+  "synthetic_data": true,
+  "input": {
+    "query": "Review synthetic wire TXN-SYN-200 for $1,250 from SYNTHETIC BUSINESS B to SYNTHETIC SUPPLIER C. The payment settles synthetic invoice INV-SYN-44 for office equipment, with no related transactions or unusual activity.",
+    "amount": 1250.0,
+    "is_cross_border": false,
+    "max_loops": 2
+  },
+  "synthetic_facts": {
+    "transaction_ids": ["TXN-SYN-200"],
+    "amounts": [1250.0],
+    "transaction_type": "wire",
+    "jurisdictions": [],
+    "counterparties": ["SYNTHETIC BUSINESS B", "SYNTHETIC SUPPLIER C"],
+    "purpose": "Payment of synthetic office-equipment invoice INV-SYN-44",
+    "time_window": null,
+    "explicitly_absent": ["related transactions", "unusual activity", "OFAC match", "sanctions concern"]
+  },
+  "retrieval": {
+    "passes": [
+      {
+        "documents": [
+          {
+            "id": "synthetic-wire-record-200",
+            "content": "SYNTHETIC TRANSACTION FIXTURE: TXN-SYN-200 is a $1,250 wire for synthetic invoice INV-SYN-44 between named synthetic businesses. No related activity is present.",
+            "metadata": {
+              "source": "synthetic_wire_TXN-SYN-200.txt",
+              "doc_type": "swift_log",
+              "record_id": "TXN-SYN-200"
+            },
+            "rerank_score": 0.90
+          }
+        ],
+        "expected_query_contains": ["TXN-SYN-200", "$1,250"]
+      }
+    ]
+  },
+  "expected": {
+    "extraction": {
+      "transaction_ids": {"match": "exact", "value": ["TXN-SYN-200"]},
+      "amount": {"match": "exact", "value": 1250.0},
+      "transaction_type": {"match": "allowed", "values": ["wire", "wire transfer"]},
+      "regulations": {"match": "exact", "value": []},
+      "suspected_patterns": {"match": "exact", "value": []},
+      "jurisdiction": {"match": "exact", "value": null},
+      "doc_type": {"match": "exact", "value": "swift_log"}
+    },
+    "aml_assessment": {
+      "risk_rating": {"match": "allowed", "values": ["Low", "LOW"]},
+      "suspicious_patterns": {"match": "exact", "value": []},
+      "flagged_transactions": {"match": "exact", "value": []},
+      "applicable_regulations": {"match": "exact", "value": []},
+      "insufficient_evidence": {"match": "exact", "value": false}
+    },
+    "critic": {
+      "actions": {"match": "exact", "value": ["GENERATE"]},
+      "failure_types": {"match": "exact", "value": ["NONE"]}
+    },
+    "report": {
+      "assessment_status": {"match": "exact", "value": "COMPLETE"},
+      "risk_rating": {"match": "exact", "value": "LOW"},
+      "flagged_wires": {"match": "exact", "value": []},
+      "applicable_regulations": {"match": "exact", "value": []},
+      "source_document_hashes": {"match": "subset", "values": ["synthetic_wire_TXN-SYN-200.txt"]}
+    },
+    "execution": {
+      "retrieval_count": {"match": "exact", "value": 1},
+      "critic_count": {"match": "exact", "value": 1},
+      "final_loop_count": {"match": "exact", "value": 1},
+      "terminates": {"match": "exact", "value": true}
+    }
+  },
+  "prohibited": {
+    "transaction_ids": [],
+    "regulations": ["FINRA Rule 3310", "31 U.S.C. 5324"],
+    "jurisdictions": ["US_OFAC"],
+    "suspicious_patterns": ["structuring", "sanctions evasion", "terrorist financing"],
+    "unsupported_fact_terms": ["offshore", "shell company", "cash deposit", "reporting-threshold evasion"]
+  }
+}
