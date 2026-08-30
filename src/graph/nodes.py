@@ -2,6 +2,7 @@
 
 import json
 import re
+import threading
 from typing import Any, Dict
 from src.graph.evidence_policy import DeficiencyType, evaluate_evidence_policy
 from src.graph.state import AgentState
@@ -13,6 +14,27 @@ from src.graph.schemas import (
 )
 from src.ingestion.retriever import FinGuardRetriever
 from src.llm.client import get_llm
+
+
+_RETRIEVER = None
+_RETRIEVER_FACTORY = None
+_RETRIEVER_LOCK = threading.Lock()
+
+
+def get_production_retriever() -> FinGuardRetriever:
+    """Lazily construct and reuse the heavy production retriever per process."""
+    global _RETRIEVER, _RETRIEVER_FACTORY
+    factory = FinGuardRetriever
+    if _RETRIEVER is None or _RETRIEVER_FACTORY is not factory:
+        with _RETRIEVER_LOCK:
+            if _RETRIEVER is None or _RETRIEVER_FACTORY is not factory:
+                _RETRIEVER = factory(
+                    chroma_path="./data/chroma",
+                    collection_name="finguard_knowledge_base",
+                    reranker_model="BAAI/bge-reranker-large",
+                )
+                _RETRIEVER_FACTORY = factory
+    return _RETRIEVER
 
 
 # Quick patch in src/graph/nodes.py (extraction_node)
@@ -90,11 +112,7 @@ def aml_audit_node(state: AgentState) -> Dict[str, Any]:
         f"(Loop {state.get('loop_count', 0)})..."
     )
 
-    retriever = FinGuardRetriever(
-        chroma_path="./data/chroma",
-        collection_name="finguard_knowledge_base",
-        reranker_model="BAAI/bge-reranker-large"
-    )
+    retriever = get_production_retriever()
 
     # If in a refinement loop, append context flags to query
     query = state["raw_query"]

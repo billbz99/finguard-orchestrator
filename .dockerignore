@@ -1,6 +1,40 @@
-.venv
-__pycache__
-*.pyc
-.git
-.pytest_cache
-.chroma
+# Secrets and local environment files
+.env
+.env.*
+!.env.example
+
+# Git, virtual environments, and local tooling
+.git/
+.github/
+.venv/
+.vscode/
+.idea/
+.codex/
+.agents/
+
+# Python, test, and build caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+
+# Development and evaluation outputs
+artifacts/evaluations/
+data/raw/
+data/test_chroma/
+chroma_db/
+finguard_chroma_db/
+*.log
+*.tmp
+*.temp
+
+# Developer model caches
+.cache/
+huggingface/
+models/
+
+# Keep the validated runtime seed under data/chroma included.

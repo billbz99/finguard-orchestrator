@@ -1,10 +1,75 @@
 # src/ingestion/retriever.py
 
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 import chromadb
 from chromadb.utils import embedding_functions
-from sentence_transformers import CrossEncoder
+
+
+class RuntimeAssetError(RuntimeError):
+    """Raised when required local retrieval assets are unavailable."""
+
+
+def _local_models_only() -> bool:
+    return os.getenv("FINGUARD_MODEL_LOCAL_ONLY", "0").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _validate_local_model_assets(reranker_model: str) -> None:
+    """Check model caches without downloading or loading model weights."""
+    from huggingface_hub import snapshot_download
+
+    try:
+        snapshot_download(repo_id=reranker_model, local_files_only=True)
+    except Exception as exc:
+        raise RuntimeAssetError("reranker_model_unavailable") from exc
+
+    onnx_dir = (
+        Path.home()
+        / ".cache"
+        / "chroma"
+        / "onnx_models"
+        / "all-MiniLM-L6-v2"
+        / "onnx"
+    )
+    required_onnx_files = {
+        "config.json",
+        "model.onnx",
+        "special_tokens_map.json",
+        "tokenizer_config.json",
+        "tokenizer.json",
+        "vocab.txt",
+    }
+    if not all((onnx_dir / filename).is_file() for filename in required_onnx_files):
+        raise RuntimeAssetError("embedding_model_unavailable")
+
+
+def validate_retrieval_assets(
+    chroma_path: str = "./data/chroma",
+    collection_name: str = "finguard_knowledge_base",
+    reranker_model: str = "BAAI/bge-reranker-large",
+) -> Dict[str, Any]:
+    """Validate serving assets without creating collections or loading models."""
+    path = Path(chroma_path)
+    if not path.is_dir():
+        raise RuntimeAssetError("chroma_path_unavailable")
+
+    try:
+        client = chromadb.PersistentClient(path=str(path))
+        collection = client.get_collection(name=collection_name)
+        document_count = collection.count()
+    except Exception as exc:
+        raise RuntimeAssetError("chroma_collection_unavailable") from exc
+
+    if document_count < 1:
+        raise RuntimeAssetError("chroma_collection_empty")
+
+    _validate_local_model_assets(reranker_model)
+    return {"document_count": document_count}
 
 
 class FinGuardRetriever:
@@ -18,14 +83,35 @@ class FinGuardRetriever:
         collection_name: str = "finguard_grounding",
         reranker_model: str = "BAAI/bge-reranker-large"
     ):
-        self.chroma_client = chromadb.PersistentClient(path=chroma_path)
-        self.embedding_fn = embedding_functions.DefaultEmbeddingFunction()
-        self.collection = self.chroma_client.get_or_create_collection(
-            name=collection_name,
-            embedding_function=self.embedding_fn,
-            metadata={"hnsw:space": "cosine"}
-        )
-        self.reranker = CrossEncoder(reranker_model)
+        path = Path(chroma_path)
+        if not path.is_dir():
+            raise RuntimeAssetError("chroma_path_unavailable")
+
+        try:
+            self.chroma_client = chromadb.PersistentClient(path=str(path))
+            self.embedding_fn = embedding_functions.DefaultEmbeddingFunction()
+            self.collection = self.chroma_client.get_collection(
+                name=collection_name,
+                embedding_function=self.embedding_fn,
+            )
+        except Exception as exc:
+            raise RuntimeAssetError("chroma_collection_unavailable") from exc
+
+        if self.collection.count() < 1:
+            raise RuntimeAssetError("chroma_collection_empty")
+
+        if _local_models_only():
+            _validate_local_model_assets(reranker_model)
+
+        try:
+            from sentence_transformers import CrossEncoder
+
+            self.reranker = CrossEncoder(
+                reranker_model,
+                local_files_only=_local_models_only(),
+            )
+        except Exception as exc:
+            raise RuntimeAssetError("reranker_model_unavailable") from exc
 
     def _build_where_clause(
         self, 

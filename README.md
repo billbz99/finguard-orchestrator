@@ -130,13 +130,22 @@ uv pip install -r requirements.txt
 Create a `.env` file in the root directory:
 
 ```env
-OPENAI_API_KEY="your-openai-api-key"
-LANGCHAIN_TRACING_V2="true"
-LANGCHAIN_API_KEY="your-langsmith-api-key"
-LANGCHAIN_PROJECT="finguard-orchestrator"
-REDIS_HOST="localhost"
-REDIS_PORT="6379"
+XAI_API_KEY="your-xai-api-key"
+XAI_MODEL="grok-4.3"
+
+# Default deployment cache; Redis is opt-in and experimental.
+FINGUARD_CACHE_MODE="memory"
+FINGUARD_MEMORY_CACHE_MAX_ENTRIES="128"
+
+# Set to 1 in a container after model assets have been packaged.
+FINGUARD_MODEL_LOCAL_ONLY="0"
 ```
+
+`FINGUARD_CACHE_MODE` accepts `memory`, `disabled`, or `redis`. Redis mode
+additionally uses `REDIS_HOST`, `REDIS_PORT`, and `REDIS_DB`. The default memory
+mode does not contact Redis. `GET /health` is a lightweight liveness check;
+`GET /ready` validates local model and Chroma assets plus required configuration
+without calling the model provider.
 
 ### 3. Dataset & Vector Store Setup
 
