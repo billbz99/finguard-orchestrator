@@ -1,0 +1,5 @@
+aws_region        = "us-east-1"
+name_prefix       = "finguard-demo"
+backend_image_uri = "123456789012.dkr.ecr.us-east-1.amazonaws.com/finguard-api:immutable-tag"
+frontend_image_uri = "123456789012.dkr.ecr.us-east-1.amazonaws.com/finguard-ui:immutable-tag"
+xai_secret_arn    = "arn:aws:secretsmanager:us-east-1:123456789012:secret:finguard/xai-api-key-example"

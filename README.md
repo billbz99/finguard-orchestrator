@@ -247,3 +247,9 @@ The Streamlit cockpit is a thin HTTP client of the FastAPI backend and does not
 initialize the graph, retrieval stack, models, or cache. It submits audits to
 `POST /api/v1/audit`. Configure the backend origin with
 `FINGUARD_API_BASE_URL`; local development defaults to `http://localhost:8000`.
+
+An AWS ECS/Fargate infrastructure skeleton is available under
+`infrastructure/terraform`. It runs Streamlit and FastAPI as separate containers
+in one task, exposes only Streamlit through an Application Load Balancer, and
+references an existing Secrets Manager ARN for the xAI key. It intentionally
+does not build images, create secret values, or deploy resources.
