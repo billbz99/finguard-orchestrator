@@ -242,3 +242,8 @@ Packaged model identifiers and immutable revisions are recorded in
 `deployment/model-manifest.json`. Local development continues to default to
 `./data/chroma`; set `FINGUARD_CHROMA_PATH` only when a different runtime copy is
 required.
+
+The Streamlit cockpit is a thin HTTP client of the FastAPI backend and does not
+initialize the graph, retrieval stack, models, or cache. It submits audits to
+`POST /api/v1/audit`. Configure the backend origin with
+`FINGUARD_API_BASE_URL`; local development defaults to `http://localhost:8000`.

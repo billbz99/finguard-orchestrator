@@ -1,10 +1,9 @@
 # src/ui/app.py
 
-import time
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
-from src.graph.schemas import has_valid_assessment_status
+from src.ui.api_client import AuditApiError, prepare_ui_result, submit_audit
 
 load_dotenv()
 
@@ -74,66 +73,16 @@ col_run, _ = st.columns([1, 5])
 with col_run:
     run_audit = st.button("🚀 Execute Audit", type="primary", use_container_width=True)
 
-# ----------------- CACHED GRAPH INITIALIZER -----------------
-@st.cache_resource(show_spinner="Initializing FinGuard Multi-Agent Engine...")
-def load_audit_engine():
-    from src.graph.workflow import build_finguard_graph
-    return build_finguard_graph()
-
-
 if run_audit and query:
-    start_time = time.time()
-    cache_status = "CACHE MISS 🔴"
-    
-    # Lazy import cache and router utilities
-    from src.graph.pre_router import route_incoming_audit, run_deterministic_ach_check
-    from src.utils.cache import get_semantic_cache, set_semantic_cache
-    
-    # 1. Check Semantic Cache
-    cached_report = get_semantic_cache(query, threshold=0.80)
-    
-    if cached_report and has_valid_assessment_status(cached_report):
-        cache_status = "CACHE HIT 🟢"
-        final_report = cached_report
-        latency = (time.time() - start_time) * 1000
-    else:
-        # 2. Check Pre-Router
-        route_decision = route_incoming_audit(query)
-        
-        if route_decision == "DETERMINISTIC_PASS":
-            with st.status("Executing Deterministic ACH Engine...", expanded=True) as status:
-                st.write("⚡ Bypassing Agentic Core (Low Risk Local Wire)")
-                final_report = run_deterministic_ach_check({})
-                status.update(label="Audit Completed via Deterministic Scanner!", state="complete")
-        else:
-            with st.status("Executing Multi-Agent State Machine...", expanded=True) as status:
-                st.write("🔄 Step 1: Normalizing SWIFT transactional data via Extraction Node...")
-                st.write("🔍 Step 2: Cross-referencing entities against ChromaDB via AML Audit Node...")
-                st.write("⚖️ Step 3: Calculating compliance score via Auditor Critic Node...")
-                st.write("📝 Step 4: Compiling finalized compliance draft...")
-                
-                app = load_audit_engine()
-                initial_state = {
-                    "raw_query": query,
-                    "doc_type": None,
-                    "jurisdiction": None,
-                    "extracted_entities": {},
-                    "retrieved_context": [],
-                    "compliance_draft": None,
-                    "confidence_score": 0.0,
-                    "loop_count": 0,
-                    "max_loops": 2,
-                    "is_audit_complete": False,
-                    "final_report": None
-                }
-                
-                output = app.invoke(initial_state)
-                final_report = output.get("final_report", {})
-                status.update(label="Multi-Agent Audit Completed!", state="complete")
-        
-        # Save to semantic cache
-        set_semantic_cache(query, final_report)
-        latency = (time.time() - start_time) * 1000
+    with st.status("Submitting audit to FinGuard API...", expanded=True) as status:
+        try:
+            api_response = submit_audit(query)
+            final_report, cache_status, latency = prepare_ui_result(api_response)
+        except AuditApiError as exc:
+            status.update(label="Audit request failed", state="error")
+            st.error(str(exc))
+            st.stop()
+        status.update(label="Audit completed", state="complete")
 
     # ----------------- COMPLIANCE SUMMARY REPORT -----------------
     st.markdown("---")
