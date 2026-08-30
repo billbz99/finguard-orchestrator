@@ -47,10 +47,17 @@ def raw_result(parsed, *, usage=None, request_id="req-safe", parsing_error=None)
     return {"raw": raw, "parsed": parsed, "parsing_error": parsing_error}
 
 
-def normal_responses(*, critic_actions=("GENERATE",), mismatch=False, usage=True):
+def normal_responses(
+    *,
+    critic_actions=("GENERATE",),
+    mismatch=False,
+    usage=True,
+    required_evidence_gaps=None,
+):
     token_usage = {"input_tokens": 2, "output_tokens": 3, "total_tokens": 5} if usage else None
     extraction = TransactionExtraction(transaction_ids=[] if mismatch else ["TXN-SYN-200"], amount=1250, transaction_type="wire", regulations=[], suspected_patterns=[], jurisdiction=None)
-    aml = AMLAssessment(risk_rating="High" if mismatch else "Low", suspicious_patterns=[], flagged_transactions=[], applicable_regulations=[], reasoning_summary="Evidence-grounded result.", insufficient_evidence=False)
+    gaps = required_evidence_gaps or []
+    aml = AMLAssessment(risk_rating="High" if mismatch else "Low", suspicious_patterns=[], flagged_transactions=[], applicable_regulations=[], required_evidence_gaps=gaps, reasoning_summary="Evidence-grounded result.", insufficient_evidence=bool(gaps))
     critics = [CriticAssessment(is_sufficient=action == "GENERATE", missing_evidence=[], failure_type="NONE" if action == "GENERATE" else "MISSING_REGULATORY_CONTEXT", recommended_action=action, critique="Controlled result.") for action in critic_actions]
     return {
         TransactionExtraction: [raw_result(extraction, usage=token_usage)],
@@ -149,7 +156,7 @@ def test_schema_valid_wrong_answer_is_semantic_mismatch(ordinary):
 
 def test_unexpected_extra_retrieval_is_semantic_mismatch(ordinary):
     ordinary.input.max_loops = 3
-    result = run_controlled_scenario(ordinary, FakeClient(normal_responses(critic_actions=("RETRIEVE_MORE", "RETRIEVE_MORE", "GENERATE"))))
+    result = run_controlled_scenario(ordinary, FakeClient(normal_responses(critic_actions=("RETRIEVE_MORE", "RETRIEVE_MORE", "GENERATE"), required_evidence_gaps=["REGULATORY_CONTEXT"])))
     assert result.failure_class == FailureClass.SEMANTIC_MISMATCH
     assert "more retrieval passes" in result.failure_message
 

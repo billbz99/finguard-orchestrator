@@ -47,6 +47,7 @@ def test_compiled_graph_diagnostics_are_cp1252_safe(monkeypatch, cp1252_print):
         suspicious_patterns=["activité inhabituelle"],
         flagged_transactions=[],
         applicable_regulations=[],
+        required_evidence_gaps=[],
         reasoning_summary="顧客 evidence supports an ordinary payment.",
         insufficient_evidence=False,
     )

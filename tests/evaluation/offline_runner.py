@@ -31,14 +31,22 @@ def _response_plan(scenario: GoldenScenario):
         transaction_type=_matcher_value(expected.extraction.transaction_type), regulations=_matcher_value(expected.extraction.regulations),
         suspected_patterns=_matcher_value(expected.extraction.suspected_patterns), jurisdiction=_matcher_value(expected.extraction.jurisdiction),
     )
+    actions = _matcher_value(expected.critic.actions)
+    failure_types = _matcher_value(expected.critic.failure_types)
+    final_failure_type = failure_types[-1]
+    if final_failure_type == "MISSING_REGULATORY_CONTEXT":
+        final_gaps = ["REGULATORY_CONTEXT"]
+    elif final_failure_type == "MISSING_TRANSACTION_DATA":
+        final_gaps = ["AMOUNT"]
+    else:
+        final_gaps = []
     final = AMLAssessment(
         risk_rating=_matcher_value(expected.aml_assessment.risk_rating), suspicious_patterns=_matcher_value(expected.aml_assessment.suspicious_patterns),
         flagged_transactions=_matcher_value(expected.aml_assessment.flagged_transactions), applicable_regulations=_matcher_value(expected.aml_assessment.applicable_regulations),
+        required_evidence_gaps=final_gaps,
         reasoning_summary="Synthetic offline replay assessment.", insufficient_evidence=_matcher_value(expected.aml_assessment.insufficient_evidence),
     )
-    actions = _matcher_value(expected.critic.actions)
-    failure_types = _matcher_value(expected.critic.failure_types)
-    assessments = [final.model_copy(update={"risk_rating": "Low", "suspicious_patterns": [], "flagged_transactions": [], "applicable_regulations": [], "reasoning_summary": "Synthetic offline replay requires more regulatory context.", "insufficient_evidence": True}) if action == "RETRIEVE_MORE" and index < len(actions) - 1 else final for index, action in enumerate(actions)]
+    assessments = [final.model_copy(update={"risk_rating": "Low", "suspicious_patterns": [], "flagged_transactions": [], "applicable_regulations": [], "required_evidence_gaps": ["REGULATORY_CONTEXT"], "reasoning_summary": "Synthetic offline replay requires more regulatory context.", "insufficient_evidence": True}) if action == "RETRIEVE_MORE" and index < len(actions) - 1 else final for index, action in enumerate(actions)]
     critics = [CriticAssessment(is_sufficient=action == "GENERATE", missing_evidence=[] if action == "GENERATE" else ["synthetic evidence"], failure_type=failure_type, recommended_action=action, critique=f"Synthetic offline replay selected {action}.") for action, failure_type in zip(actions, failure_types, strict=True)]
     return {TransactionExtraction: [extraction], AMLAssessment: assessments, CriticAssessment: critics}
 

@@ -103,13 +103,17 @@ def assessment(
     risk="High",
     transaction_id="TXN-900",
     insufficient=False,
+    required_evidence_gaps=None,
     summary="Evidence supports a structuring concern.",
 ):
+    if required_evidence_gaps is None:
+        required_evidence_gaps = ["AMOUNT"] if insufficient else []
     return AMLAssessment(
         risk_rating=risk,
         suspicious_patterns=[] if insufficient else ["structuring"],
         flagged_transactions=[] if insufficient else [transaction_id],
         applicable_regulations=[] if insufficient else ["FINRA Rule 3310"],
+        required_evidence_gaps=required_evidence_gaps,
         reasoning_summary=summary,
         insufficient_evidence=insufficient,
     )
@@ -222,6 +226,7 @@ def test_graph_performs_exactly_one_retrieval_refinement_cycle(monkeypatch):
     first_assessment = assessment(
         risk="Low",
         insufficient=True,
+        required_evidence_gaps=["REGULATORY_CONTEXT"],
         summary="More regulatory context is required.",
     )
     second_assessment = assessment(summary="Refined context supports review.")
@@ -277,11 +282,13 @@ def test_graph_enforces_max_loops_for_repeated_retrieve_more(monkeypatch):
     first_assessment = assessment(
         risk="Low",
         insufficient=True,
+        required_evidence_gaps=["REGULATORY_CONTEXT"],
         summary="Regulatory evidence remains incomplete.",
     )
     second_assessment = assessment(
         risk="Low",
         insufficient=True,
+        required_evidence_gaps=["REGULATORY_CONTEXT"],
         summary="Regulatory evidence is still incomplete.",
     )
     result, llm, retriever = run_graph(

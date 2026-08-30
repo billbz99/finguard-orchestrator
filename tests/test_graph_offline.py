@@ -74,7 +74,18 @@ def test_auditor_critic_updates_state(monkeypatch, action, expected_complete):
     state = {
         "raw_query": "Audit TXN-100.",
         "extracted_entities": {"transaction_ids": ["TXN-100"]},
-        "aml_assessment": {"risk_rating": "Low"},
+        "aml_assessment": {
+            "risk_rating": "Low",
+            "required_evidence_gaps": (
+                []
+                if action == "GENERATE"
+                else [
+                    "REGULATORY_CONTEXT"
+                    if action == "RETRIEVE_MORE"
+                    else "AMOUNT"
+                ]
+            ),
+        },
         "loop_count": 0,
         "max_loops": 3,
     }
@@ -95,7 +106,10 @@ def test_auditor_critic_stops_retrieval_at_max_loops(monkeypatch):
     state = {
         "raw_query": "Audit TXN-100.",
         "extracted_entities": {"transaction_ids": ["TXN-100"]},
-        "aml_assessment": {"risk_rating": "Low"},
+        "aml_assessment": {
+            "risk_rating": "Low",
+            "required_evidence_gaps": ["REGULATORY_CONTEXT"],
+        },
         "loop_count": 1,
         "max_loops": 2,
     }
@@ -120,6 +134,7 @@ def test_auditor_critic_prompt_uses_conclusion_relative_sufficiency(monkeypatch)
             "extracted_entities": {"transaction_ids": ["TXN-100"]},
             "aml_assessment": {
                 "risk_rating": "Low",
+                "required_evidence_gaps": [],
                 "insufficient_evidence": False,
             },
             "loop_count": 0,
@@ -133,6 +148,86 @@ def test_auditor_critic_prompt_uses_conclusion_relative_sufficiency(monkeypatch)
     assert "regulatory documents do not need to repeat transaction facts" in prompt
     assert "insufficient_evidence=true" in prompt
     assert "Your critique does not rewrite the AML assessment" in prompt
+
+
+@pytest.mark.parametrize(
+    ("gaps", "expected_failure", "expected_action"),
+    [
+        ([], "NONE", "GENERATE"),
+        (["AMOUNT"], "MISSING_TRANSACTION_DATA", "STOP_INSUFFICIENT"),
+        (
+            ["JURISDICTION"],
+            "MISSING_TRANSACTION_DATA",
+            "STOP_INSUFFICIENT",
+        ),
+        (
+            ["MATERIAL_CONFLICT"],
+            "INCONSISTENT_ANALYSIS",
+            "STOP_INSUFFICIENT",
+        ),
+        (
+            ["REGULATORY_CONTEXT"],
+            "MISSING_REGULATORY_CONTEXT",
+            "RETRIEVE_MORE",
+        ),
+    ],
+)
+def test_auditor_critic_enforces_typed_evidence_policy(
+    monkeypatch,
+    gaps,
+    expected_failure,
+    expected_action,
+):
+    monkeypatch.setattr(
+        nodes,
+        "get_llm",
+        lambda: FakeLLM(critic_response("STOP_INSUFFICIENT")),
+    )
+
+    update = auditor_critic_node(
+        {
+            "raw_query": "Review synthetic wire TXN-100.",
+            "extracted_entities": {"transaction_ids": ["TXN-100"]},
+            "aml_assessment": {
+                "risk_rating": "Low",
+                "required_evidence_gaps": gaps,
+            },
+            "loop_count": 0,
+            "max_loops": 3,
+        }
+    )
+
+    critic = update["critic_assessment"]
+    assert critic["failure_type"] == expected_failure
+    assert critic["recommended_action"] == expected_action
+
+
+def test_auditor_critic_preserves_typed_inconsistent_analysis(monkeypatch):
+    response = CriticAssessment(
+        is_sufficient=False,
+        missing_evidence=[],
+        failure_type="INCONSISTENT_ANALYSIS",
+        recommended_action="STOP_INSUFFICIENT",
+        critique="Assessment contradicts the supplied evidence.",
+    )
+    monkeypatch.setattr(nodes, "get_llm", lambda: FakeLLM(response))
+
+    update = auditor_critic_node(
+        {
+            "raw_query": "Review synthetic wire TXN-100.",
+            "extracted_entities": {"transaction_ids": ["TXN-100"]},
+            "aml_assessment": {
+                "risk_rating": "Low",
+                "required_evidence_gaps": [],
+            },
+            "loop_count": 0,
+            "max_loops": 2,
+        }
+    )
+
+    critic = update["critic_assessment"]
+    assert critic["failure_type"] == "INCONSISTENT_ANALYSIS"
+    assert critic["recommended_action"] == "STOP_INSUFFICIENT"
 
 
 def test_structured_generation_builds_normalized_deduplicated_report():
@@ -215,6 +310,9 @@ def test_structured_generation_derives_assessment_status(
             "risk_rating": "Low",
             "reasoning_summary": "Assessment summary.",
             "insufficient_evidence": insufficient_evidence,
+            "required_evidence_gaps": (
+                ["AMOUNT"] if insufficient_evidence else []
+            ),
         }
     }
     if critic_action is not None:
@@ -235,8 +333,9 @@ def test_insufficient_report_preserves_supported_review_findings():
                 "applicable_regulations": [],
                 "reasoning_summary": "Transaction facts require review.",
                 "insufficient_evidence": True,
+                "required_evidence_gaps": ["MATERIAL_CONFLICT"],
             },
-            "critic_assessment": {"recommended_action": "STOP_INSUFFICIENT"},
+            "critic_assessment": {"recommended_action": "GENERATE"},
         }
     )
 

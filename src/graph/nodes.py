@@ -3,6 +3,7 @@
 import json
 import re
 from typing import Any, Dict
+from src.graph.evidence_policy import DeficiencyType, evaluate_evidence_policy
 from src.graph.state import AgentState
 from src.graph.schemas import (
     ComplianceReport,
@@ -165,6 +166,15 @@ def aml_audit_node(state: AgentState) -> Dict[str, Any]:
         patterns, a provisional risk rating, and transaction IDs requiring AML
         review; those flags do not confirm illegal activity.
 
+        Populate required_evidence_gaps only with missing or unresolved evidence
+        required for the particular conclusion you propose. Do not list a field
+        merely because it is absent. Use REGULATORY_CONTEXT when transaction
+        evidence may be understandable but regulatory claims cannot be finalized.
+        Use MATERIAL_CONFLICT when contradictory evidence materially prevents
+        finalization. Missing evidence that does not affect the proposed
+        conclusion must not appear in required_evidence_gaps. The application
+        normalizes insufficient_evidence from required_evidence_gaps.
+
         Audit request:
         {state["raw_query"]}
 
@@ -176,14 +186,22 @@ def aml_audit_node(state: AgentState) -> Dict[str, Any]:
         """
     )
 
+    assessment_payload = assessment.model_dump()
+    evidence_policy = evaluate_evidence_policy(
+        assessment.required_evidence_gaps
+    )
+    assessment_payload["insufficient_evidence"] = (
+        not evidence_policy.is_finalizable
+    )
+
     print(
         f"[AML Reasoning] Assessment: "
-        f"{assessment.model_dump()!a}"
+        f"{assessment_payload!a}"
     )
 
     return {
         "retrieved_context": valid_chunks,
-        "aml_assessment": assessment.model_dump(),
+        "aml_assessment": assessment_payload,
     }
 
 
@@ -192,6 +210,10 @@ def auditor_critic_node(state: AgentState) -> Dict[str, Any]:
 
     current_loop = state.get("loop_count", 0)
     max_loops = state.get("max_loops", 2)
+    aml_assessment = state.get("aml_assessment") or {}
+    evidence_policy = evaluate_evidence_policy(
+        aml_assessment.get("required_evidence_gaps", [])
+    )
 
     llm = get_llm()
     structured_llm = llm.with_structured_output(CriticAssessment)
@@ -259,10 +281,46 @@ def auditor_critic_node(state: AgentState) -> Dict[str, Any]:
 
         AML assessment:
         {json.dumps(state.get("aml_assessment", {}), indent=2)}
+
+        Required evidence gaps declared by the AML assessment:
+        {json.dumps(list(evidence_policy.required_gaps), indent=2)}
+
+        These typed gaps identify evidence required for the proposed conclusion.
+        Legal routing combinations are enforced deterministically after your
+        assessment. Do not treat an absent optional field as a required gap.
         """
     )
 
     critic = assessment.model_dump()
+
+    if evidence_policy.deficiency_type == DeficiencyType.TRANSACTION:
+        critic.update(
+            is_sufficient=False,
+            missing_evidence=list(evidence_policy.required_gaps),
+            failure_type="MISSING_TRANSACTION_DATA",
+            recommended_action="STOP_INSUFFICIENT",
+        )
+    elif evidence_policy.deficiency_type == DeficiencyType.MATERIAL_CONFLICT:
+        critic.update(
+            is_sufficient=False,
+            missing_evidence=list(evidence_policy.required_gaps),
+            failure_type="INCONSISTENT_ANALYSIS",
+            recommended_action="STOP_INSUFFICIENT",
+        )
+    elif evidence_policy.deficiency_type == DeficiencyType.REGULATORY:
+        critic.update(
+            is_sufficient=False,
+            missing_evidence=list(evidence_policy.required_gaps),
+            failure_type="MISSING_REGULATORY_CONTEXT",
+            recommended_action="RETRIEVE_MORE",
+        )
+    elif critic["failure_type"] != "INCONSISTENT_ANALYSIS":
+        critic.update(
+            is_sufficient=True,
+            missing_evidence=[],
+            failure_type="NONE",
+            recommended_action="GENERATE",
+        )
 
     # Never allow unlimited retrieval loops.
     if critic["recommended_action"] == "RETRIEVE_MORE" and current_loop + 1 >= max_loops:
@@ -294,7 +352,13 @@ def structured_generation_node(state: AgentState) -> Dict[str, Any]:
     critic = state.get("critic_assessment") or {}
 
     critic_action = critic.get("recommended_action")
-    assessment_is_sufficient = not assessment.get("insufficient_evidence", True)
+    evidence_policy = evaluate_evidence_policy(
+        assessment.get("required_evidence_gaps", [])
+    )
+    assessment_is_sufficient = (
+        not assessment.get("insufficient_evidence", True)
+        and evidence_policy.is_finalizable
+    )
     assessment_status = (
         "COMPLETE"
         if critic_action == "GENERATE" and assessment_is_sufficient

@@ -1,7 +1,7 @@
 {
   "schema_version": "1.1",
   "scenario_id": "ofac-us-001",
-  "scenario_version": 2,
+  "scenario_version": 3,
   "title": "Explicit synthetic OFAC screening match",
   "description": "A synthetic United States OFAC screening match receives regulatory refinement before a supported high-priority review disposition.",
   "tags": ["ofac", "sanctions", "us-jurisdiction", "high-risk", "retry"],
@@ -28,7 +28,7 @@
         "documents": [
           {
             "id": "synthetic-ofac-guidance-a",
-            "content": "SYNTHETIC REGULATORY FIXTURE, NOT VERBATIM LEGAL TEXT: An explicit sanctions-screening match requires review before a supported disposition can be reached, but this first-pass text does not provide disposition guidance.",
+            "content": "SYNTHETIC REGULATORY INDEX FIXTURE, NON-AUTHORITATIVE: OFAC sanctions-screening disposition guidance exists elsewhere. This index entry contains no match-disposition criteria, risk classification, review recommendation, or basis for finalizing an assessment.",
             "metadata": {"source": "synthetic_ofac_guidance_a.txt", "doc_type": "regulatory_pdf", "section": "synthetic-sanctions-initial"},
             "rerank_score": 0.91
           }

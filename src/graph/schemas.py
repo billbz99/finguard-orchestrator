@@ -6,6 +6,18 @@ from pydantic import BaseModel, Field
 
 
 AssessmentStatus = Literal["COMPLETE", "INSUFFICIENT_EVIDENCE"]
+EvidenceGap = Literal[
+    "AMOUNT",
+    "TIMING",
+    "COUNTERPARTIES",
+    "JURISDICTION",
+    "TRANSACTION_RELATIONSHIP",
+    "TRANSACTION_HISTORY",
+    "PURPOSE",
+    "INTENT",
+    "REGULATORY_CONTEXT",
+    "MATERIAL_CONFLICT",
+]
 VALID_ASSESSMENT_STATUSES = frozenset({"COMPLETE", "INSUFFICIENT_EVIDENCE"})
 
 
@@ -100,12 +112,22 @@ class AMLAssessment(BaseModel):
         description="Regulations supported by the retrieved context"
     )
 
+    required_evidence_gaps: List[EvidenceGap] = Field(
+        description=(
+            "Evidence missing or unresolved that is required for the specific "
+            "AML conclusion; do not list merely absent optional facts"
+        )
+    )
+
     reasoning_summary: str = Field(
         description="Evidence-grounded explanation of the AML assessment"
     )
 
     insufficient_evidence: bool = Field(
-        description="True when there is not enough evidence to make a reliable AML judgment"
+        description=(
+            "Compatibility field normalized by the application from "
+            "required_evidence_gaps"
+        )
     )
     
 class CriticAssessment(BaseModel):

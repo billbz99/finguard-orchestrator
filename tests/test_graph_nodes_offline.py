@@ -174,12 +174,15 @@ def test_extraction_node_does_not_invent_fields_missing_from_llm_response(monkey
     assert update["jurisdiction"] is None
 
 
-def aml_assessment(*, insufficient_evidence=False):
+def aml_assessment(*, insufficient_evidence=False, required_evidence_gaps=None):
+    if required_evidence_gaps is None:
+        required_evidence_gaps = ["AMOUNT"] if insufficient_evidence else []
     return AMLAssessment(
         risk_rating="Low" if insufficient_evidence else "High",
         suspicious_patterns=[] if insufficient_evidence else ["structuring"],
         flagged_transactions=[] if insufficient_evidence else ["TXN-500"],
         applicable_regulations=[] if insufficient_evidence else ["FINRA Rule 3310"],
+        required_evidence_gaps=required_evidence_gaps,
         reasoning_summary=(
             "Transaction evidence is insufficient."
             if insufficient_evidence
@@ -279,9 +282,54 @@ def test_aml_audit_handles_empty_retrieval_and_insufficient_evidence(monkeypatch
     assert context_section.strip() == ""
 
 
+@pytest.mark.parametrize(
+    ("required_evidence_gaps", "model_value", "expected_value"),
+    [
+        ([], True, False),
+        (["AMOUNT"], False, True),
+        (["REGULATORY_CONTEXT"], False, True),
+        (["MATERIAL_CONFLICT"], False, True),
+    ],
+)
+def test_aml_audit_normalizes_insufficient_evidence_from_typed_gaps(
+    monkeypatch,
+    required_evidence_gaps,
+    model_value,
+    expected_value,
+):
+    assessment = AMLAssessment(
+        risk_rating="Medium",
+        suspicious_patterns=["review finding"],
+        flagged_transactions=["TXN-650"],
+        applicable_regulations=[],
+        required_evidence_gaps=required_evidence_gaps,
+        reasoning_summary="Synthetic evidence assessment.",
+        insufficient_evidence=model_value,
+    )
+    install_fake_retriever(monkeypatch, [])
+    install_fake_llm(monkeypatch, AMLAssessment, assessment)
+
+    update = aml_audit_node(
+        {
+            "raw_query": "Review synthetic wire TXN-650.",
+            "extracted_entities": {"transaction_ids": ["TXN-650"]},
+            "loop_count": 0,
+        }
+    )
+
+    assert update["aml_assessment"]["insufficient_evidence"] is expected_value
+    assert update["aml_assessment"]["required_evidence_gaps"] == (
+        required_evidence_gaps
+    )
+    assert update["aml_assessment"]["flagged_transactions"] == ["TXN-650"]
+
+
 def test_aml_audit_refinement_query_appends_context_without_replacing_facts(monkeypatch):
     retriever_calls = install_fake_retriever(monkeypatch, [])
-    assessment = aml_assessment(insufficient_evidence=True)
+    assessment = aml_assessment(
+        insufficient_evidence=True,
+        required_evidence_gaps=["REGULATORY_CONTEXT"],
+    )
     llm_calls = install_fake_llm(monkeypatch, AMLAssessment, assessment)
     state = {
         "raw_query": "Audit wire TXN-700 amount $9,500 from ACME Bank.",
