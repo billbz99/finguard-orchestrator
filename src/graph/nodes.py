@@ -12,7 +12,7 @@ from src.graph.schemas import (
     AMLAssessment,
     CriticAssessment,
 )
-from src.ingestion.retriever import FinGuardRetriever
+from src.ingestion.retriever import FinGuardRetriever, get_chroma_path
 from src.llm.client import get_llm
 
 
@@ -29,7 +29,7 @@ def get_production_retriever() -> FinGuardRetriever:
         with _RETRIEVER_LOCK:
             if _RETRIEVER is None or _RETRIEVER_FACTORY is not factory:
                 _RETRIEVER = factory(
-                    chroma_path="./data/chroma",
+                    chroma_path=get_chroma_path(),
                     collection_name="finguard_knowledge_base",
                     reranker_model="BAAI/bge-reranker-large",
                 )

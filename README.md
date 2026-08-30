@@ -222,3 +222,23 @@ docker build -t finguard-orchestrator:latest .
 # Run the containerized service
 docker run -d -p 8000:8000 --env-file .env --name finguard-app finguard-orchestrator:latest
 ```
+
+The backend image installs the frozen `uv.lock` resolution, bakes the two
+Hugging Face model snapshots and Chroma's separate ONNX embedding asset during
+image build, and packages the checked-in `data/chroma` seed. It does not run
+ingestion or download models at startup.
+
+The image runs as the non-root `finguard` user with one Uvicorn worker. Startup
+copies the immutable seed from `/opt/finguard/chroma-seed` to the writable,
+ephemeral `/tmp/finguard/chroma` runtime path. `FINGUARD_MODEL_LOCAL_ONLY=1`,
+`HF_HUB_OFFLINE=1`, and `TRANSFORMERS_OFFLINE=1` prevent model-repository access
+at runtime while leaving xAI connectivity available; Chroma telemetry is disabled.
+`/health` is the lightweight
+container liveness endpoint; `/ready` validates xAI configuration, the runtime
+Chroma collection, and local model assets without a provider call. In an eventual
+ECS service, use `/health` for liveness and `/ready` for traffic readiness.
+
+Packaged model identifiers and immutable revisions are recorded in
+`deployment/model-manifest.json`. Local development continues to default to
+`./data/chroma`; set `FINGUARD_CHROMA_PATH` only when a different runtime copy is
+required.

@@ -25,9 +25,12 @@ dist/
 # Development and evaluation outputs
 artifacts/evaluations/
 data/raw/
+data/processed/
 data/test_chroma/
 chroma_db/
 finguard_chroma_db/
+tests/
+test_grok.py
 *.log
 *.tmp
 *.temp
@@ -36,5 +39,8 @@ finguard_chroma_db/
 .cache/
 huggingface/
 models/
+
+# Dependency input not used by the locked container build
+requirements.txt
 
 # Keep the validated runtime seed under data/chroma included.

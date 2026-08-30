@@ -1,0 +1,26 @@
+{
+  "manifest_version": "1.0",
+  "models": [
+    {
+      "purpose": "semantic_cache_embeddings",
+      "identifier": "sentence-transformers/all-MiniLM-L6-v2",
+      "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+      "container_path": "/opt/finguard/models/huggingface",
+      "compatibility": "Used by SentenceTransformer in src.utils.cache; only the safetensors weights, SentenceTransformers module configuration, and tokenizer assets required by the pinned snapshot are packaged."
+    },
+    {
+      "purpose": "retrieval_reranking",
+      "identifier": "BAAI/bge-reranker-large",
+      "revision": "55611d7bca2a7133960a6d3b71e083071bbfc312",
+      "container_path": "/opt/finguard/models/huggingface",
+      "compatibility": "Used by CrossEncoder in src.ingestion.retriever; only the safetensors weights, model configuration, and tokenizer assets required by the pinned snapshot are packaged."
+    },
+    {
+      "purpose": "chroma_query_embeddings",
+      "identifier": "chroma/onnx-all-MiniLM-L6-v2",
+      "revision": "sha256:913d7300ceae3b2dbc2c50d1de4baacab4be7b9380491c27fab7418616a16ec3",
+      "container_path": "/opt/finguard/home/.cache/chroma/onnx_models/all-MiniLM-L6-v2",
+      "compatibility": "Chroma 1.5.9 DefaultEmbeddingFunction asset; separate from the Hugging Face cache."
+    }
+  ]
+}

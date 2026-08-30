@@ -19,6 +19,11 @@ def _local_models_only() -> bool:
     }
 
 
+def get_chroma_path() -> str:
+    """Return the configured runtime Chroma path with the local default."""
+    return os.getenv("FINGUARD_CHROMA_PATH", "./data/chroma")
+
+
 def _validate_local_model_assets(reranker_model: str) -> None:
     """Check model caches without downloading or loading model weights."""
     from huggingface_hub import snapshot_download
@@ -49,12 +54,12 @@ def _validate_local_model_assets(reranker_model: str) -> None:
 
 
 def validate_retrieval_assets(
-    chroma_path: str = "./data/chroma",
+    chroma_path: Optional[str] = None,
     collection_name: str = "finguard_knowledge_base",
     reranker_model: str = "BAAI/bge-reranker-large",
 ) -> Dict[str, Any]:
     """Validate serving assets without creating collections or loading models."""
-    path = Path(chroma_path)
+    path = Path(chroma_path or get_chroma_path())
     if not path.is_dir():
         raise RuntimeAssetError("chroma_path_unavailable")
 
