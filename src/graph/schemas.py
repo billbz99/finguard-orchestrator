@@ -60,7 +60,10 @@ class ComplianceReport(BaseModel):
     )
     flagged_wires: List[str] = Field(
         default_factory=list,
-        description="List of suspicious wire reference IDs matching illegal AML patterns"
+        description=(
+            "Wire reference IDs requiring AML review based on available evidence; "
+            "inclusion does not confirm illegal activity"
+        )
     )
     applicable_regulations: List[str] = Field(
         default_factory=list,
@@ -86,7 +89,10 @@ class AMLAssessment(BaseModel):
 
     flagged_transactions: List[str] = Field(
         default_factory=list,
-        description="Transaction IDs that should be flagged"
+        description=(
+            "Transaction IDs requiring AML review based on available evidence; "
+            "inclusion does not confirm illegal activity"
+        )
     )
 
     applicable_regulations: List[str] = Field(

@@ -147,6 +147,11 @@ def test_all_golden_scenarios_execute_and_pass(
             "GENERATE",
         ),
         (
+            "ofac-us-001",
+            ["RETRIEVE_MORE", "GENERATE"],
+            "GENERATE",
+        ),
+        (
             "max-loop-001",
             ["RETRIEVE_MORE", "RETRIEVE_MORE"],
             "STOP_INSUFFICIENT",
@@ -183,6 +188,19 @@ def test_max_loop_terminates_as_insufficient_evidence(scenarios_by_id):
     assert result.terminated is True
     assert result.final_status == "INSUFFICIENT_EVIDENCE"
     assert result.final_critic_action == "STOP_INSUFFICIENT"
+    assert result.final_risk_rating in {"MEDIUM", "HIGH"}
+    assert result.flagged_wires == ["TXN-SYN-1100", "TXN-SYN-1101"]
+    assert "structuring" in result.suspicious_patterns
+
+
+def test_repaired_ofac_contract_retrieves_then_generates(scenarios_by_id):
+    result = run_offline_replay(scenarios_by_id["ofac-us-001"])
+
+    assert result.passed is True
+    assert result.critic_actions == ["RETRIEVE_MORE", "GENERATE"]
+    assert result.retrieval_count == 2
+    assert result.final_status == "COMPLETE"
+    assert result.flagged_wires == ["TXN-SYN-600"]
 
 
 def test_final_stored_action_matches_independently_from_raw_actions(scenarios_by_id):
@@ -313,6 +331,21 @@ def test_jurisdiction_substrings_do_not_produce_us_ofac(scenarios_by_id):
 
     assert result.passed is True
     assert result.jurisdiction is None
+
+    assert scenarios_by_id[
+        "jurisdiction-substrings-001"
+    ].expected.extraction.amount.value is None
+
+
+def test_conflicting_amount_is_unresolved_and_flagged_for_review(scenarios_by_id):
+    scenario = scenarios_by_id["conflicting-evidence-001"]
+    result = run_offline_replay(scenario)
+
+    assert scenario.expected.extraction.amount.value is None
+    assert result.passed is True
+    assert result.final_status == "INSUFFICIENT_EVIDENCE"
+    assert result.flagged_wires == ["TXN-SYN-1400"]
+    assert result.suspicious_patterns == []
 
 
 def test_hallucination_trap_has_no_prohibited_violations(scenarios_by_id):

@@ -1,7 +1,7 @@
 {
   "schema_version": "1.1",
   "scenario_id": "max-loop-001",
-  "scenario_version": 2,
+  "scenario_version": 3,
   "title": "Maximum regulatory refinement boundary",
   "description": "A complete synthetic threshold-evasion pattern encounters two inadequate regulatory index results, exercising the deterministic maximum-loop boundary.",
   "tags": ["retry", "max-loops", "insufficient-evidence"],
@@ -59,9 +59,9 @@
       "doc_type": {"match": "exact", "value": null}
     },
     "aml_assessment": {
-      "risk_rating": {"match": "allowed", "values": ["Low", "LOW"]},
-      "suspicious_patterns": {"match": "exact", "value": []},
-      "flagged_transactions": {"match": "exact", "value": []},
+      "risk_rating": {"match": "allowed", "values": ["Medium", "MEDIUM", "High", "HIGH"]},
+      "suspicious_patterns": {"match": "subset", "values": ["structuring"]},
+      "flagged_transactions": {"match": "exact", "value": ["TXN-SYN-1100", "TXN-SYN-1101"]},
       "applicable_regulations": {"match": "exact", "value": []},
       "insufficient_evidence": {"match": "exact", "value": true}
     },
@@ -72,8 +72,8 @@
     },
     "report": {
       "assessment_status": {"match": "exact", "value": "INSUFFICIENT_EVIDENCE"},
-      "risk_rating": {"match": "exact", "value": "LOW"},
-      "flagged_wires": {"match": "exact", "value": []},
+      "risk_rating": {"match": "allowed", "values": ["MEDIUM", "HIGH"]},
+      "flagged_wires": {"match": "exact", "value": ["TXN-SYN-1100", "TXN-SYN-1101"]},
       "applicable_regulations": {"match": "exact", "value": []},
       "source_document_hashes": {"match": "subset", "values": ["synthetic_max_loop_b.txt"]}
     },

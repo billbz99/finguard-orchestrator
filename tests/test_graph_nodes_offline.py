@@ -243,6 +243,15 @@ def test_aml_audit_retrieves_filters_context_and_propagates_assessment(monkeypat
     assert rejected["content"] not in llm_calls["prompt"]
     assert state["raw_query"] in llm_calls["prompt"]
     assert '"TXN-500"' in llm_calls["prompt"]
+    assert "audit request and extracted entities as evidence" in llm_calls["prompt"]
+    assert "retrieved context as evidence about" in llm_calls["prompt"]
+    assert "Regulatory documents do not need to" in llm_calls["prompt"]
+    assert "A missing field is not automatically fatal" in llm_calls["prompt"]
+    assert "supported LOW/no-indicator conclusion" in llm_calls["prompt"]
+    normalized_prompt = " ".join(llm_calls["prompt"].split())
+    assert "Assert an applicable regulation only when" in normalized_prompt
+    assert "does not support finalizing the requested AML conclusion" in normalized_prompt
+    assert "do not confirm illegal activity" in llm_calls["prompt"]
     assert state == original_state
     assert "unrelated" not in update
 

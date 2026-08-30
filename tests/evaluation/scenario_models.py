@@ -65,7 +65,7 @@ class ScenarioReference(StrictModel):
 
 class DatasetManifest(StrictModel):
     dataset_id: Literal["finguard-synthetic-aml-golden"]
-    dataset_version: Literal["1.2.0"]
+    dataset_version: Literal["1.3.0"]
     schema_version: str
     expectation_profile: Literal["aml-golden-v1"]
     scenarios: list[ScenarioReference] = Field(min_length=1)

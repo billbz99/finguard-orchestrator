@@ -51,7 +51,7 @@ def test_manifest_and_exactly_fifteen_scenarios_load_successfully():
     manifest, scenarios = load_golden_dataset()
 
     assert manifest.dataset_id == "finguard-synthetic-aml-golden"
-    assert manifest.dataset_version == "1.2.0"
+    assert manifest.dataset_version == "1.3.0"
     assert manifest.schema_version == "1.1"
     assert manifest.expectation_profile == "aml-golden-v1"
     assert len(manifest.scenarios) == 15
@@ -71,10 +71,18 @@ def test_every_manifest_reference_exists_and_matches_a_valid_scenario():
     for scenario_id in {
         "single-refinement-001",
         "missing-regulation-001",
-        "max-loop-001",
     }:
         assert loaded_by_id[scenario_id].schema_version == "1.1"
         assert loaded_by_id[scenario_id].scenario_version == 2
+
+    for scenario_id, scenario_version in {
+        "jurisdiction-substrings-001": 2,
+        "conflicting-evidence-001": 2,
+        "ofac-us-001": 2,
+        "max-loop-001": 3,
+    }.items():
+        assert loaded_by_id[scenario_id].schema_version == "1.1"
+        assert loaded_by_id[scenario_id].scenario_version == scenario_version
 
 
 def test_scenarios_require_expected_semantic_sections_and_synthetic_ids():

@@ -140,13 +140,30 @@ def aml_audit_node(state: AgentState) -> Dict[str, Any]:
         2. the extracted transaction entities,
         3. the retrieved regulatory context supplied below.
 
+        Treat the audit request and extracted entities as evidence about what
+        happened in the transaction. Treat retrieved context as evidence about
+        regulatory standards and guidance. Regulatory documents do not need to
+        repeat transaction facts.
+
         Do not assume that a relevant regulation means the transaction is suspicious.
 
         Do not invent transaction behavior, amounts, counterparties, dates,
         countries, or other evidence that is not present.
 
-        If there is not enough transaction evidence to support an AML conclusion,
-        set insufficient_evidence to true.
+        Evaluate evidence sufficiency for the specific conclusion being made.
+        A missing field is not automatically fatal: require an amount for an
+        amount- or threshold-dependent conclusion, timing for a timing-dependent
+        conclusion, jurisdiction for a jurisdiction-specific conclusion, and so
+        on. A supported LOW/no-indicator conclusion does not require every
+        commonly useful field. A positive suspicious-pattern conclusion requires
+        the transaction facts that constitute that pattern. Assert an applicable
+        regulation only when adequate retrieved regulatory context supports it.
+
+        Set insufficient_evidence to true only when the available evidence does
+        not support finalizing the requested AML conclusion reliably. An
+        insufficient assessment may still preserve evidence-grounded suspicious
+        patterns, a provisional risk rating, and transaction IDs requiring AML
+        review; those flags do not confirm illegal activity.
 
         Audit request:
         {state["raw_query"]}
@@ -189,8 +206,10 @@ def auditor_critic_node(state: AgentState) -> Dict[str, Any]:
         Distinguish carefully between:
 
         MISSING_TRANSACTION_DATA:
-        Missing transaction facts such as amounts, dates, counterparties,
-        related transactions, geographic information, or transaction history.
+        Transaction facts required for the specific proposed conclusion are
+        missing. Depending on that conclusion, these may include amounts, dates,
+        counterparties, related transactions, geographic information, or
+        transaction history; these fields are not a universal mandatory checklist.
         Searching for additional regulations will NOT solve this problem.
 
         MISSING_REGULATORY_CONTEXT:
@@ -202,6 +221,17 @@ def auditor_critic_node(state: AgentState) -> Dict[str, Any]:
 
         NONE:
         The assessment is adequately supported.
+
+        Apply conclusion-relative evidence sufficiency. A missing field is not
+        automatically fatal, and a supported LOW/no-indicator conclusion need
+        not contain every commonly useful transaction field. Positive suspicious
+        conclusions require the facts that constitute the pattern. Regulatory
+        applicability claims require adequate retrieved regulatory context;
+        regulatory documents do not need to repeat transaction facts.
+
+        If the AML assessment has insufficient_evidence=true, NONE and GENERATE
+        are inconsistent unless a sufficient AML reassessment has replaced it.
+        Your critique does not rewrite the AML assessment.
 
         Choose exactly one recommended action:
 
@@ -264,14 +294,12 @@ def structured_generation_node(state: AgentState) -> Dict[str, Any]:
     critic = state.get("critic_assessment") or {}
 
     critic_action = critic.get("recommended_action")
-    if critic_action == "STOP_INSUFFICIENT":
-        assessment_status = "INSUFFICIENT_EVIDENCE"
-    elif critic_action == "GENERATE":
-        assessment_status = "COMPLETE"
-    elif assessment.get("insufficient_evidence", True):
-        assessment_status = "INSUFFICIENT_EVIDENCE"
-    else:
-        assessment_status = "COMPLETE"
+    assessment_is_sufficient = not assessment.get("insufficient_evidence", True)
+    assessment_status = (
+        "COMPLETE"
+        if critic_action == "GENERATE" and assessment_is_sufficient
+        else "INSUFFICIENT_EVIDENCE"
+    )
 
     risk_rating = assessment.get("risk_rating", "Low")
 

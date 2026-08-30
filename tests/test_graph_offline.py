@@ -15,19 +15,22 @@ from src.graph.workflow import should_continue_audit
 class FakeStructuredLLM:
     def __init__(self, response: CriticAssessment):
         self.response = response
+        self.prompt = None
 
     def invoke(self, prompt: str) -> CriticAssessment:
         assert "independent critic" in prompt
+        self.prompt = prompt
         return self.response
 
 
 class FakeLLM:
     def __init__(self, response: CriticAssessment):
         self.response = response
+        self.structured_llm = FakeStructuredLLM(response)
 
     def with_structured_output(self, schema):
         assert schema is CriticAssessment
-        return FakeStructuredLLM(self.response)
+        return self.structured_llm
 
 
 def critic_response(action: str) -> CriticAssessment:
@@ -107,6 +110,31 @@ def test_auditor_critic_stops_retrieval_at_max_loops(monkeypatch):
     assert update["is_audit_complete"] is True
 
 
+def test_auditor_critic_prompt_uses_conclusion_relative_sufficiency(monkeypatch):
+    fake_llm = FakeLLM(critic_response("GENERATE"))
+    monkeypatch.setattr(nodes, "get_llm", lambda: fake_llm)
+
+    auditor_critic_node(
+        {
+            "raw_query": "Review benign wire TXN-100 without a jurisdiction.",
+            "extracted_entities": {"transaction_ids": ["TXN-100"]},
+            "aml_assessment": {
+                "risk_rating": "Low",
+                "insufficient_evidence": False,
+            },
+            "loop_count": 0,
+            "max_loops": 2,
+        }
+    )
+
+    prompt = fake_llm.structured_llm.prompt
+    assert "not a universal mandatory checklist" in prompt
+    assert "supported LOW/no-indicator conclusion" in prompt
+    assert "regulatory documents do not need to repeat transaction facts" in prompt
+    assert "insufficient_evidence=true" in prompt
+    assert "Your critique does not rewrite the AML assessment" in prompt
+
+
 def test_structured_generation_builds_normalized_deduplicated_report():
     state = {
         "aml_assessment": {
@@ -121,6 +149,7 @@ def test_structured_generation_builds_normalized_deduplicated_report():
             {"metadata": {"source": "fincen_advisory.pdf"}},
             {"metadata": {"source": "finra_rule_3310.pdf"}},
         ],
+        "critic_assessment": {"recommended_action": "GENERATE"},
     }
 
     update = structured_generation_node(state)
@@ -169,10 +198,11 @@ def test_structured_generation_handles_missing_optional_state():
 @pytest.mark.parametrize(
     ("critic_action", "insufficient_evidence", "expected_status"),
     [
-        ("GENERATE", True, "COMPLETE"),
+        ("GENERATE", True, "INSUFFICIENT_EVIDENCE"),
+        ("GENERATE", False, "COMPLETE"),
         ("STOP_INSUFFICIENT", False, "INSUFFICIENT_EVIDENCE"),
         (None, True, "INSUFFICIENT_EVIDENCE"),
-        (None, False, "COMPLETE"),
+        (None, False, "INSUFFICIENT_EVIDENCE"),
     ],
 )
 def test_structured_generation_derives_assessment_status(
@@ -193,6 +223,39 @@ def test_structured_generation_derives_assessment_status(
     update = structured_generation_node(state)
 
     assert update["final_report"]["assessment_status"] == expected_status
+
+
+def test_insufficient_report_preserves_supported_review_findings():
+    update = structured_generation_node(
+        {
+            "aml_assessment": {
+                "risk_rating": "Medium",
+                "suspicious_patterns": ["structuring"],
+                "flagged_transactions": ["TXN-REVIEW"],
+                "applicable_regulations": [],
+                "reasoning_summary": "Transaction facts require review.",
+                "insufficient_evidence": True,
+            },
+            "critic_assessment": {"recommended_action": "STOP_INSUFFICIENT"},
+        }
+    )
+
+    report = update["final_report"]
+    assert report["assessment_status"] == "INSUFFICIENT_EVIDENCE"
+    assert report["risk_rating"] == "MEDIUM"
+    assert report["flagged_wires"] == ["TXN-REVIEW"]
+    assert report["applicable_regulations"] == []
+
+
+def test_flagged_contracts_describe_review_not_confirmed_illegality():
+    transaction_description = AMLAssessment.model_fields[
+        "flagged_transactions"
+    ].description
+    wire_description = ComplianceReport.model_fields["flagged_wires"].description
+
+    for description in (transaction_description, wire_description):
+        assert "requiring AML review" in description
+        assert "does not confirm illegal activity" in description
 
 
 def test_transaction_extraction_schema_accepts_valid_contract():

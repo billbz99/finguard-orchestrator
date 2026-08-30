@@ -1,20 +1,94 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "scenario_id": "ofac-us-001",
-  "scenario_version": 1,
+  "scenario_version": 2,
   "title": "Explicit synthetic OFAC screening match",
-  "description": "A synthetic wire explicitly states an OFAC screening match in the United States context.",
-  "tags": ["ofac", "sanctions", "us-jurisdiction", "high-risk"],
+  "description": "A synthetic United States OFAC screening match receives regulatory refinement before a supported high-priority review disposition.",
+  "tags": ["ofac", "sanctions", "us-jurisdiction", "high-risk", "retry"],
   "synthetic_data": true,
-  "input": {"query": "Review synthetic wire TXN-SYN-600 for $25,000. The synthetic screening record explicitly reports an OFAC match in the United States and requires sanctions review.", "amount": 25000.0, "is_cross_border": false, "max_loops": 2},
-  "synthetic_facts": {"transaction_ids": ["TXN-SYN-600"], "amounts": [25000.0], "transaction_type": "wire", "jurisdictions": ["United States"], "counterparties": [], "purpose": "Synthetic sanctions-screening review", "time_window": null, "explicitly_absent": ["foreign country", "named counterparty"]},
-  "retrieval": {"passes": [{"documents": [{"id": "synthetic-ofac-guidance", "content": "SYNTHETIC REGULATORY FIXTURE, NOT VERBATIM LEGAL TEXT: An explicit sanctions-screening match requires review before a supported disposition can be reached.", "metadata": {"source": "synthetic_ofac_guidance.txt", "doc_type": "swift_log", "section": "synthetic-sanctions"}, "rerank_score": 0.91}], "expected_query_contains": ["TXN-SYN-600", "OFAC"]}]},
-  "expected": {
-    "extraction": {"transaction_ids": {"match": "exact", "value": ["TXN-SYN-600"]}, "amount": {"match": "exact", "value": 25000.0}, "transaction_type": {"match": "allowed", "values": ["wire", "wire transfer"]}, "regulations": {"match": "exact", "value": []}, "suspected_patterns": {"match": "subset", "values": ["sanctions evasion"]}, "jurisdiction": {"match": "exact", "value": "US_OFAC"}, "doc_type": {"match": "exact", "value": "swift_log"}},
-    "aml_assessment": {"risk_rating": {"match": "allowed", "values": ["High", "HIGH"]}, "suspicious_patterns": {"match": "subset", "values": ["sanctions evasion"]}, "flagged_transactions": {"match": "exact", "value": ["TXN-SYN-600"]}, "applicable_regulations": {"match": "subset", "values": ["OFAC sanctions screening"]}, "insufficient_evidence": {"match": "exact", "value": false}},
-    "critic": {"actions": {"match": "exact", "value": ["GENERATE"]}, "failure_types": {"match": "exact", "value": ["NONE"]}},
-    "report": {"assessment_status": {"match": "exact", "value": "COMPLETE"}, "risk_rating": {"match": "exact", "value": "HIGH"}, "flagged_wires": {"match": "exact", "value": ["TXN-SYN-600"]}, "applicable_regulations": {"match": "subset", "values": ["OFAC sanctions screening"]}, "source_document_hashes": {"match": "subset", "values": ["synthetic_ofac_guidance.txt"]}},
-    "execution": {"retrieval_count": {"match": "exact", "value": 1}, "critic_count": {"match": "exact", "value": 1}, "final_loop_count": {"match": "exact", "value": 1}, "terminates": {"match": "exact", "value": true}}
+  "input": {
+    "query": "Review synthetic wire TXN-SYN-600 for $25,000. The synthetic screening record explicitly reports an OFAC match in the United States and requires sanctions review.",
+    "amount": 25000.0,
+    "is_cross_border": false,
+    "max_loops": 2
   },
-  "prohibited": {"transaction_ids": [], "regulations": [], "jurisdictions": ["United Kingdom", "Cayman Islands"], "suspicious_patterns": ["structuring"], "unsupported_fact_terms": ["foreign beneficiary", "shell company"]}
+  "synthetic_facts": {
+    "transaction_ids": ["TXN-SYN-600"],
+    "amounts": [25000.0],
+    "transaction_type": "wire",
+    "jurisdictions": ["United States"],
+    "counterparties": [],
+    "purpose": "Synthetic sanctions-screening review",
+    "time_window": null,
+    "explicitly_absent": ["foreign country", "named counterparty", "sanctions evasion intent"]
+  },
+  "retrieval": {
+    "passes": [
+      {
+        "documents": [
+          {
+            "id": "synthetic-ofac-guidance-a",
+            "content": "SYNTHETIC REGULATORY FIXTURE, NOT VERBATIM LEGAL TEXT: An explicit sanctions-screening match requires review before a supported disposition can be reached, but this first-pass text does not provide disposition guidance.",
+            "metadata": {"source": "synthetic_ofac_guidance_a.txt", "doc_type": "regulatory_pdf", "section": "synthetic-sanctions-initial"},
+            "rerank_score": 0.91
+          }
+        ],
+        "expected_query_contains": ["TXN-SYN-600", "OFAC"]
+      },
+      {
+        "documents": [
+          {
+            "id": "synthetic-ofac-guidance-b",
+            "content": "SYNTHETIC PORTFOLIO-TEST GUIDANCE, NON-AUTHORITATIVE: A transaction with an explicit confirmed OFAC sanctions-screening match should be treated as a high-priority sanctions review alert and flagged for review. This supports an OFAC sanctions screening control conclusion but does not prove sanctions evasion or other illegal activity.",
+            "metadata": {"source": "synthetic_ofac_guidance_b.txt", "doc_type": "regulatory_pdf", "section": "synthetic-sanctions-disposition"},
+            "rerank_score": 0.93
+          }
+        ],
+        "expected_query_contains": ["TXN-SYN-600", "FINRA Rule 3310 structuring", "Currency Transaction Reporting thresholds"]
+      }
+    ]
+  },
+  "expected": {
+    "extraction": {
+      "transaction_ids": {"match": "exact", "value": ["TXN-SYN-600"]},
+      "amount": {"match": "exact", "value": 25000.0},
+      "transaction_type": {"match": "allowed", "values": ["wire", "wire transfer"]},
+      "regulations": {"match": "exact", "value": ["OFAC"]},
+      "suspected_patterns": {"match": "subset", "values": ["OFAC match"]},
+      "jurisdiction": {"match": "exact", "value": "US_OFAC"},
+      "doc_type": {"match": "exact", "value": "swift_log"}
+    },
+    "aml_assessment": {
+      "risk_rating": {"match": "allowed", "values": ["High", "HIGH"]},
+      "suspicious_patterns": {"match": "subset", "values": ["OFAC match"]},
+      "flagged_transactions": {"match": "exact", "value": ["TXN-SYN-600"]},
+      "applicable_regulations": {"match": "subset", "values": ["OFAC"]},
+      "insufficient_evidence": {"match": "exact", "value": false}
+    },
+    "critic": {
+      "actions": {"match": "exact", "value": ["RETRIEVE_MORE", "GENERATE"]},
+      "failure_types": {"match": "exact", "value": ["MISSING_REGULATORY_CONTEXT", "NONE"]},
+      "final_stored_action": {"match": "exact", "value": "GENERATE"}
+    },
+    "report": {
+      "assessment_status": {"match": "exact", "value": "COMPLETE"},
+      "risk_rating": {"match": "exact", "value": "HIGH"},
+      "flagged_wires": {"match": "exact", "value": ["TXN-SYN-600"]},
+      "applicable_regulations": {"match": "subset", "values": ["OFAC"]},
+      "source_document_hashes": {"match": "subset", "values": ["synthetic_ofac_guidance_b.txt"]}
+    },
+    "execution": {
+      "retrieval_count": {"match": "exact", "value": 2},
+      "critic_count": {"match": "exact", "value": 2},
+      "final_loop_count": {"match": "exact", "value": 2},
+      "terminates": {"match": "exact", "value": true}
+    }
+  },
+  "prohibited": {
+    "transaction_ids": [],
+    "regulations": [],
+    "jurisdictions": ["United Kingdom", "Cayman Islands"],
+    "suspicious_patterns": ["structuring", "sanctions evasion"],
+    "unsupported_fact_terms": ["foreign beneficiary", "shell company", "confirmed illegal activity"]
+  }
 }
