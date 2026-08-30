@@ -253,3 +253,8 @@ An AWS ECS/Fargate infrastructure skeleton is available under
 in one task, exposes only Streamlit through an Application Load Balancer, and
 references an existing Secrets Manager ARN for the xAI key. It intentionally
 does not build images, create secret values, or deploy resources.
+
+Build the thin frontend independently with
+`docker build -f Dockerfile.frontend -t finguard-ui:deployment-v1 .`. The image
+contains only Streamlit-side dependencies and UI source; configure its backend
+at runtime with `FINGUARD_API_BASE_URL`.

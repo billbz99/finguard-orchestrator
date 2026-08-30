@@ -1,0 +1,12 @@
+*
+!Dockerfile.frontend
+!deployment/
+deployment/*
+!deployment/frontend-requirements.lock
+!src/
+src/*
+!src/ui/
+src/ui/*
+!src/ui/__init__.py
+!src/ui/app.py
+!src/ui/api_client.py
