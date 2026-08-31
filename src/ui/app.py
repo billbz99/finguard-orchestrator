@@ -3,7 +3,12 @@
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
-from src.ui.api_client import AuditApiError, prepare_ui_result, submit_audit
+from src.ui.api_client import (
+    AuditApiError,
+    format_latency_ms,
+    prepare_ui_result,
+    submit_audit,
+)
 
 load_dotenv()
 
@@ -138,8 +143,20 @@ if run_audit and query:
     # ----------------- TELEMETRY & DIAGNOSTICS -----------------
     with st.expander("🛠️ Developer Telemetry & Diagnostics", expanded=True):
         t1, t2, t3, t4, t5 = st.columns(5)
-        t1.metric("Semantic Cache Status", cache_status)
-        t2.metric("Execution Latency", f"{latency:.1f} ms")
+        t1.metric(
+            "Semantic Cache Status",
+            cache_status,
+            help=f"Backend cache status: {api_response['cache_status']}",
+        )
+        t2.metric(
+            "Execution Latency",
+            format_latency_ms(latency),
+            help=f"Full execution time: {latency:,.1f} ms",
+        )
         t3.metric("Logical LLM Calls", telemetry["logical_calls"])
         t4.metric("Total Tokens", telemetry["total_tokens"])
-        t5.metric("Est. Provider Cost", telemetry["estimated_cost"])
+        t5.metric(
+            "Est. Provider Cost",
+            telemetry["estimated_cost"],
+            help=f"Backend cost status: {telemetry['cost_status']}",
+        )

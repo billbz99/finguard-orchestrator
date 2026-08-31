@@ -86,12 +86,13 @@ def test_submit_audit_uses_endpoint_and_handles_success(monkeypatch):
     assert json.loads(request.data) == {"query": "Audit TXN-1"}
     assert timeout == api_client.AUDIT_TIMEOUT_SECONDS
     assert report == payload["report"]
-    assert cache_status == "CACHE HIT 🟢"
+    assert cache_status == "HIT"
     assert latency == 12.5
     assert telemetry == {
         "logical_calls": "Unavailable",
-        "total_tokens": "Usage unavailable",
-        "estimated_cost": "Cost unavailable",
+        "total_tokens": "N/A",
+        "estimated_cost": "N/A",
+        "cost_status": "unavailable",
     }
 
 
@@ -109,7 +110,8 @@ def test_ui_formats_estimated_cost_from_backend_without_calculating_it():
     assert telemetry == {
         "logical_calls": "3",
         "total_tokens": "125",
-        "estimated_cost": "$0.001234 estimated",
+        "estimated_cost": "$0.001",
+        "cost_status": "estimated",
     }
 
 
@@ -124,7 +126,8 @@ def test_ui_formats_zero_cost_and_unavailable_pricing():
         }
     }
     *_, telemetry = api_client.prepare_ui_result(payload)
-    assert telemetry["estimated_cost"] == "$0.00 estimated"
+    assert telemetry["estimated_cost"] == "N/A"
+    assert telemetry["cost_status"] == "not_applicable"
 
     payload["observability"]["llm_usage"].update(
         logical_call_count=3,
@@ -134,7 +137,31 @@ def test_ui_formats_zero_cost_and_unavailable_pricing():
     )
     *_, telemetry = api_client.prepare_ui_result(payload)
     assert telemetry["total_tokens"] == "125"
-    assert telemetry["estimated_cost"] == "Cost unavailable"
+    assert telemetry["estimated_cost"] == "N/A"
+    assert telemetry["cost_status"] == "pricing_not_configured"
+
+
+def test_ui_formats_compact_metric_values():
+    payload = successful_payload()
+    payload["cache_status"] = "CACHE_MISS"
+    payload["execution_latency_ms"] = 35095.2
+    payload["observability"] = {
+        "llm_usage": {
+            "logical_call_count": 3,
+            "total_tokens": 8687,
+            "estimated_cost_usd": "0.0042",
+            "cost_status": "estimated",
+        }
+    }
+
+    _, cache_status, latency, telemetry = api_client.prepare_ui_result(payload)
+
+    assert cache_status == "MISS"
+    assert api_client.format_latency_ms(latency) == "35.1 s"
+    assert telemetry["logical_calls"] == "3"
+    assert telemetry["total_tokens"] == "8,687"
+    assert telemetry["estimated_cost"] == "$0.004"
+    assert telemetry["cost_status"] == "estimated"
 
 
 def test_streamlit_uses_backend_telemetry_without_hard_coded_cost():

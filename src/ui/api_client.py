@@ -80,8 +80,9 @@ def _telemetry_display(payload: dict[str, Any]) -> dict[str, str]:
     if not isinstance(usage, dict):
         return {
             "logical_calls": "Unavailable",
-            "total_tokens": "Usage unavailable",
-            "estimated_cost": "Cost unavailable",
+            "total_tokens": "N/A",
+            "estimated_cost": "N/A",
+            "cost_status": "unavailable",
         }
 
     logical_calls = usage.get("logical_call_count")
@@ -89,32 +90,43 @@ def _telemetry_display(payload: dict[str, Any]) -> dict[str, str]:
     cost_status = usage.get("cost_status")
     estimated_cost = usage.get("estimated_cost_usd")
 
-    if cost_status == "not_applicable":
-        cost_display = "$0.00 estimated"
-    elif cost_status == "estimated" and estimated_cost is not None:
+    if cost_status == "estimated" and estimated_cost is not None:
         try:
-            cost_display = f"${Decimal(str(estimated_cost)):.6f} estimated"
+            cost_display = _format_estimated_cost(Decimal(str(estimated_cost)))
         except (InvalidOperation, ValueError):
-            cost_display = "Cost unavailable"
+            cost_display = "N/A"
     else:
-        cost_display = "Cost unavailable"
+        cost_display = "N/A"
 
     return {
         "logical_calls": str(logical_calls) if isinstance(logical_calls, int) else "Unavailable",
-        "total_tokens": str(total_tokens) if isinstance(total_tokens, int) else "Usage unavailable",
+        "total_tokens": f"{total_tokens:,}" if isinstance(total_tokens, int) else "N/A",
         "estimated_cost": cost_display,
+        "cost_status": cost_status if isinstance(cost_status, str) else "unavailable",
     }
+
+
+def _format_estimated_cost(cost: Decimal) -> str:
+    """Render an API-provided cost estimate compactly without recalculating it."""
+    if cost == 0:
+        return "$0.00"
+    if cost >= Decimal("0.01"):
+        return f"${cost:.2f}"
+    if cost >= Decimal("0.001"):
+        return f"${cost:.3f}"
+    return f"${cost:.6f}"
+
+
+def format_latency_ms(latency_ms: float) -> str:
+    """Render milliseconds as a compact seconds value for the metric card."""
+    return f"{latency_ms / 1000:.1f} s"
 
 
 def prepare_ui_result(
     payload: dict[str, Any],
 ) -> tuple[dict[str, Any], str, float, dict[str, str]]:
     """Map the validated API envelope to existing Streamlit display values."""
-    cache_status = (
-        "CACHE HIT 🟢"
-        if payload["cache_status"] == "CACHE_HIT"
-        else "CACHE MISS 🔴"
-    )
+    cache_status = "HIT" if payload["cache_status"] == "CACHE_HIT" else "MISS"
     return (
         payload["report"],
         cache_status,
