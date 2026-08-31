@@ -10,6 +10,9 @@ The module does not create container images or secret values. Before applying,
 publish immutable backend and frontend images, create an XAI API key secret in
 AWS Secrets Manager, and provide their URIs/ARN through a local `.tfvars` file.
 Do not commit that file if it contains account-specific or sensitive values.
+Use digest-pinned ECR image URIs; tag-only and placeholder values are rejected.
+Follow `DEPLOYMENT.md` for the controlled publication, planning, approval,
+validation, and teardown sequence.
 
 Initial sizing is 2 vCPU, 4 GiB task memory, and 30 GiB ephemeral storage. The
 validated backend used roughly 0.4--0.9 GiB at readiness; a separate model probe

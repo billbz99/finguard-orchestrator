@@ -28,13 +28,29 @@ variable "public_subnet_cidrs" {
 }
 
 variable "backend_image_uri" {
-  description = "Immutable container image URI for the packaged FastAPI backend."
+  description = "Digest-pinned private ECR URI for the packaged FastAPI backend."
   type        = string
+
+  validation {
+    condition = can(regex(
+      "^[0-9]{12}\\.dkr\\.ecr\\.[a-z0-9-]+\\.amazonaws\\.com/finguard-api@sha256:[0-9a-f]{64}$",
+      var.backend_image_uri,
+    )) && !startswith(var.backend_image_uri, "000000000000.")
+    error_message = "backend_image_uri must be a non-placeholder, digest-pinned private ECR finguard-api URI."
+  }
 }
 
 variable "frontend_image_uri" {
-  description = "Immutable container image URI for the thin Streamlit frontend."
+  description = "Digest-pinned private ECR URI for the thin Streamlit frontend."
   type        = string
+
+  validation {
+    condition = can(regex(
+      "^[0-9]{12}\\.dkr\\.ecr\\.[a-z0-9-]+\\.amazonaws\\.com/finguard-ui@sha256:[0-9a-f]{64}$",
+      var.frontend_image_uri,
+    )) && !startswith(var.frontend_image_uri, "000000000000.")
+    error_message = "frontend_image_uri must be a non-placeholder, digest-pinned private ECR finguard-ui URI."
+  }
 }
 
 variable "xai_secret_arn" {
