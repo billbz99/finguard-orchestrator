@@ -13,6 +13,10 @@ from src.graph.workflow import build_finguard_graph
 from src.graph.pre_router import route_incoming_audit, run_deterministic_ach_check
 from src.graph.schemas import has_valid_assessment_status
 from src.ingestion.retriever import RuntimeAssetError, validate_retrieval_assets
+from src.observability.llm_usage import (
+    AuditObservability,
+    LLMUsageCollector,
+)
 from src.utils.cache import (
     get_semantic_cache,
     set_semantic_cache,
@@ -46,6 +50,17 @@ class AuditResponse(BaseModel):
     cache_status: str
     execution_latency_ms: float
     report: Dict[str, Any]
+    observability: AuditObservability | None = None
+
+
+def _safe_observability(
+    collector: LLMUsageCollector,
+) -> AuditObservability | None:
+    """Keep optional telemetry failures outside the audit result path."""
+    try:
+        return AuditObservability(llm_usage=collector.snapshot())
+    except Exception:
+        return None
 
 
 @app.get("/health")
@@ -97,6 +112,10 @@ async def readiness_check():
 @app.post("/api/v1/audit", response_model=AuditResponse)
 async def execute_audit(request: AuditRequest):
     start_time = time.time()
+    usage_collector = LLMUsageCollector(
+        provider="xAI",
+        model=os.getenv("XAI_MODEL", "grok-4.3"),
+    )
     
     # 1. Check Redis / In-Memory Semantic Cache
     cached_report = get_semantic_cache(request.query, threshold=0.80)
@@ -107,6 +126,7 @@ async def execute_audit(request: AuditRequest):
             cache_status="CACHE_HIT",
             execution_latency_ms=round(latency, 2),
             report=cached_report,
+            observability=_safe_observability(usage_collector),
         )
 
     # 2. Evaluate Pre-Router
@@ -135,6 +155,7 @@ async def execute_audit(request: AuditRequest):
 
         config = {
             "tags": ["AML_AUDIT_RUN", "FASTAPI_SERVICE"],
+            "callbacks": [usage_collector],
             "metadata": {
                 "client_tier": request.client_tier,
                 "audit_id": request.audit_id or f"aud-{int(time.time())}",
@@ -165,6 +186,7 @@ async def execute_audit(request: AuditRequest):
         cache_status="CACHE_MISS",
         execution_latency_ms=round(latency, 2),
         report=report,
+        observability=_safe_observability(usage_collector),
     )
 
 
