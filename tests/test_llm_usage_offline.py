@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import TypedDict
 from uuid import uuid4
 
@@ -9,7 +10,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult, LLMResult
 from langgraph.graph import END, StateGraph
 
 from src.graph.schemas import ComplianceReport
-from src.observability.llm_usage import LLMUsageCollector
+from src.observability.llm_usage import LLMPricing, LLMUsageCollector, load_xai_pricing
 
 
 @pytest.fixture(autouse=True)
@@ -18,6 +19,14 @@ def _disable_remote_tracing(monkeypatch):
     monkeypatch.setenv("LANGCHAIN_TRACING_V2", "false")
     monkeypatch.setenv("LANGSMITH_TRACING", "false")
     monkeypatch.setenv("LANGSMITH_TRACING_V2", "false")
+    for name in (
+        "XAI_PRICE_MODEL",
+        "XAI_INPUT_PRICE_PER_MILLION",
+        "XAI_OUTPUT_PRICE_PER_MILLION",
+        "XAI_CACHED_INPUT_PRICE_PER_MILLION",
+        "XAI_PRICING_REVISION",
+    ):
+        monkeypatch.delenv(name, raising=False)
 
 
 def _result(*, usage=None, raw_usage=None, request_id="request-1"):
@@ -251,6 +260,30 @@ def test_agentic_api_response_and_observability_failure_do_not_change_report(mon
     assert response.json()["observability"] is None
 
 
+def test_api_serializes_configured_decimal_cost(monkeypatch):
+    from src import main
+
+    class FakeGraph:
+        async def ainvoke(self, state, config):
+            _record(config["callbacks"][0], usage=_normalized(100, 20, 120))
+            return {"final_report": _report()}
+
+    monkeypatch.setenv("XAI_MODEL", "offline")
+    monkeypatch.setenv("XAI_PRICE_MODEL", "offline")
+    monkeypatch.setenv("XAI_INPUT_PRICE_PER_MILLION", "2")
+    monkeypatch.setenv("XAI_OUTPUT_PRICE_PER_MILLION", "4")
+    monkeypatch.setattr(main, "graph", FakeGraph())
+    monkeypatch.setattr(main, "get_semantic_cache", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main, "set_semantic_cache", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main, "route_incoming_audit", lambda **kwargs: "AGENTIC_GRAPH")
+
+    response = TestClient(main.app).post("/api/v1/audit", json={"query": "audit"})
+    usage = response.json()["observability"]["llm_usage"]
+    assert response.status_code == 200
+    assert usage["cost_status"] == "estimated"
+    assert usage["estimated_cost_usd"] == "0.00028"
+
+
 def test_compliance_report_schema_is_unchanged_and_sensitive_content_not_logged(caplog):
     assert set(ComplianceReport.model_fields) == {
         "assessment_status",
@@ -269,3 +302,90 @@ def test_compliance_report_schema_is_unchanged_and_sensitive_content_not_logged(
         run_id=run_id,
     )
     assert secret not in caplog.text
+
+
+def _pricing(*, model="offline", cached=None):
+    return LLMPricing(
+        model=model,
+        input_per_million=Decimal("2"),
+        output_per_million=Decimal("4"),
+        cached_input_per_million=(Decimal(str(cached)) if cached is not None else None),
+        revision="fixture-1",
+    )
+
+
+def test_decimal_cost_estimation_uses_configured_input_and_output_rates():
+    collector = LLMUsageCollector(provider="xAI", model="offline", pricing=_pricing())
+    _record(collector, usage=_normalized(100, 20, 120))
+    usage = collector.snapshot()
+    assert usage.cost_status == "estimated"
+    assert usage.estimated_cost_usd == Decimal("0.00028")
+    assert usage.pricing_revision == "fixture-1"
+
+
+def test_cached_input_uses_cached_rate_without_double_counting():
+    collector = LLMUsageCollector(
+        provider="xAI", model="offline", pricing=_pricing(cached="0.5")
+    )
+    metadata = _normalized(100, 20, 120)
+    metadata["input_token_details"] = {"cache_read": 20}
+    metadata["output_token_details"] = {"reasoning": 10}
+    _record(collector, usage=metadata)
+    usage = collector.snapshot()
+    assert usage.cached_input_tokens == 20
+    assert usage.reasoning_tokens == 10
+    assert usage.estimated_cost_usd == Decimal("0.00025")
+
+
+def test_cached_usage_without_cached_rate_has_no_estimate():
+    collector = LLMUsageCollector(provider="xAI", model="offline", pricing=_pricing())
+    metadata = _normalized(100, 20, 120)
+    metadata["input_token_details"] = {"cache_read": 20}
+    _record(collector, usage=metadata)
+    usage = collector.snapshot()
+    assert usage.estimated_cost_usd is None
+    assert usage.cost_status == "pricing_not_configured"
+
+
+@pytest.mark.parametrize("value", ["-1", "invalid", "NaN", "Infinity"])
+def test_invalid_pricing_is_rejected_without_raising(monkeypatch, value):
+    monkeypatch.setenv("XAI_PRICE_MODEL", "offline")
+    monkeypatch.setenv("XAI_INPUT_PRICE_PER_MILLION", value)
+    monkeypatch.setenv("XAI_OUTPUT_PRICE_PER_MILLION", "4")
+    assert load_xai_pricing() is None
+
+
+def test_missing_pricing_and_model_mismatch_are_explicit():
+    missing = LLMUsageCollector(provider="xAI", model="offline")
+    _record(missing, usage=_normalized())
+    assert missing.snapshot().cost_status == "pricing_not_configured"
+
+    mismatch = LLMUsageCollector(
+        provider="xAI", model="offline", pricing=_pricing(model="another-model")
+    )
+    _record(mismatch, usage=_normalized())
+    usage = mismatch.snapshot()
+    assert usage.cost_status == "model_mismatch"
+    assert usage.estimated_cost_usd is None
+
+
+def test_unavailable_and_partial_usage_cannot_be_costed():
+    unavailable = LLMUsageCollector(
+        provider="xAI", model="offline", pricing=_pricing()
+    )
+    _record(unavailable)
+    assert unavailable.snapshot().cost_status == "usage_unavailable"
+
+    partial = LLMUsageCollector(provider="xAI", model="offline", pricing=_pricing())
+    _record(partial, usage=_normalized())
+    _record(partial)
+    usage = partial.snapshot()
+    assert usage.usage_status == "partial"
+    assert usage.cost_status == "usage_unavailable"
+    assert usage.estimated_cost_usd is None
+
+
+def test_zero_call_path_has_zero_not_applicable_cost():
+    usage = LLMUsageCollector(provider="xAI", model="offline").snapshot()
+    assert usage.estimated_cost_usd == Decimal("0")
+    assert usage.cost_status == "not_applicable"

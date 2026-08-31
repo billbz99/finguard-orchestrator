@@ -2,6 +2,7 @@
 
 import json
 import os
+from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -72,11 +73,51 @@ def submit_audit(
     return payload
 
 
-def prepare_ui_result(payload: dict[str, Any]) -> tuple[dict[str, Any], str, float]:
+def _telemetry_display(payload: dict[str, Any]) -> dict[str, str]:
+    """Format optional backend observability without estimating cost locally."""
+    observability = payload.get("observability")
+    usage = observability.get("llm_usage") if isinstance(observability, dict) else None
+    if not isinstance(usage, dict):
+        return {
+            "logical_calls": "Unavailable",
+            "total_tokens": "Usage unavailable",
+            "estimated_cost": "Cost unavailable",
+        }
+
+    logical_calls = usage.get("logical_call_count")
+    total_tokens = usage.get("total_tokens")
+    cost_status = usage.get("cost_status")
+    estimated_cost = usage.get("estimated_cost_usd")
+
+    if cost_status == "not_applicable":
+        cost_display = "$0.00 estimated"
+    elif cost_status == "estimated" and estimated_cost is not None:
+        try:
+            cost_display = f"${Decimal(str(estimated_cost)):.6f} estimated"
+        except (InvalidOperation, ValueError):
+            cost_display = "Cost unavailable"
+    else:
+        cost_display = "Cost unavailable"
+
+    return {
+        "logical_calls": str(logical_calls) if isinstance(logical_calls, int) else "Unavailable",
+        "total_tokens": str(total_tokens) if isinstance(total_tokens, int) else "Usage unavailable",
+        "estimated_cost": cost_display,
+    }
+
+
+def prepare_ui_result(
+    payload: dict[str, Any],
+) -> tuple[dict[str, Any], str, float, dict[str, str]]:
     """Map the validated API envelope to existing Streamlit display values."""
     cache_status = (
         "CACHE HIT 🟢"
         if payload["cache_status"] == "CACHE_HIT"
         else "CACHE MISS 🔴"
     )
-    return payload["report"], cache_status, float(payload["execution_latency_ms"])
+    return (
+        payload["report"],
+        cache_status,
+        float(payload["execution_latency_ms"]),
+        _telemetry_display(payload),
+    )

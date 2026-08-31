@@ -3,6 +3,8 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
+import os
 from typing import Any, Literal
 from uuid import UUID
 
@@ -18,6 +20,72 @@ AuditUsageStatus = Literal[
     "unavailable",
     "not_applicable",
 ]
+CostStatus = Literal[
+    "estimated",
+    "pricing_not_configured",
+    "model_mismatch",
+    "usage_unavailable",
+    "not_applicable",
+]
+
+
+@dataclass(frozen=True)
+class LLMPricing:
+    """Validated per-million-token prices for one configured model."""
+
+    model: str
+    input_per_million: Decimal
+    output_per_million: Decimal
+    cached_input_per_million: Decimal | None = None
+    revision: str | None = None
+
+
+def _price_from_env(name: str, *, required: bool) -> Decimal | None:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        if required:
+            raise ValueError(f"{name} is required")
+        return None
+    try:
+        value = Decimal(raw.strip())
+    except InvalidOperation as exc:
+        raise ValueError(f"{name} must be a decimal") from exc
+    if not value.is_finite() or value < 0:
+        raise ValueError(f"{name} must be a non-negative finite decimal")
+    return value
+
+
+def load_xai_pricing() -> LLMPricing | None:
+    """Load optional pricing without allowing bad configuration to affect audits."""
+
+    names = (
+        "XAI_PRICE_MODEL",
+        "XAI_INPUT_PRICE_PER_MILLION",
+        "XAI_OUTPUT_PRICE_PER_MILLION",
+        "XAI_CACHED_INPUT_PRICE_PER_MILLION",
+        "XAI_PRICING_REVISION",
+    )
+    if not any(os.getenv(name, "").strip() for name in names):
+        return None
+    try:
+        model = os.getenv("XAI_PRICE_MODEL", "").strip()
+        if not model:
+            raise ValueError("XAI_PRICE_MODEL is required")
+        return LLMPricing(
+            model=model,
+            input_per_million=_price_from_env(
+                "XAI_INPUT_PRICE_PER_MILLION", required=True
+            ),
+            output_per_million=_price_from_env(
+                "XAI_OUTPUT_PRICE_PER_MILLION", required=True
+            ),
+            cached_input_per_million=_price_from_env(
+                "XAI_CACHED_INPUT_PRICE_PER_MILLION", required=False
+            ),
+            revision=os.getenv("XAI_PRICING_REVISION") or None,
+        )
+    except (ValueError, TypeError):
+        return None
 
 
 class LLMCallUsage(BaseModel):
@@ -53,6 +121,9 @@ class AuditLLMUsage(BaseModel):
     total_tokens: int | None = Field(default=None, ge=0)
     cached_input_tokens: int | None = Field(default=None, ge=0)
     reasoning_tokens: int | None = Field(default=None, ge=0)
+    estimated_cost_usd: Decimal | None = Field(default=None, ge=0)
+    cost_status: CostStatus
+    pricing_revision: str | None = None
     calls: list[LLMCallUsage] = Field(default_factory=list)
 
 
@@ -191,16 +262,57 @@ def no_llm_usage(*, provider: str, model: str) -> AuditLLMUsage:
         total_tokens=0,
         cached_input_tokens=0,
         reasoning_tokens=0,
+        estimated_cost_usd=Decimal("0"),
+        cost_status="not_applicable",
         calls=[],
     )
+
+
+def _estimate_cost(
+    *,
+    usage_status: AuditUsageStatus,
+    model: str,
+    input_tokens: int | None,
+    output_tokens: int | None,
+    cached_input_tokens: int | None,
+    pricing: LLMPricing | None,
+) -> tuple[Decimal | None, CostStatus, str | None]:
+    if usage_status != "reported" or input_tokens is None or output_tokens is None:
+        return None, "usage_unavailable", pricing.revision if pricing else None
+    if pricing is None:
+        return None, "pricing_not_configured", None
+    if pricing.model != model:
+        return None, "model_mismatch", pricing.revision
+
+    cached = cached_input_tokens or 0
+    if cached > input_tokens:
+        return None, "usage_unavailable", pricing.revision
+    if cached and pricing.cached_input_per_million is None:
+        return None, "pricing_not_configured", pricing.revision
+
+    uncached = input_tokens - cached
+    cached_rate = pricing.cached_input_per_million or Decimal("0")
+    cost = (
+        Decimal(uncached) * pricing.input_per_million
+        + Decimal(cached) * cached_rate
+        + Decimal(output_tokens) * pricing.output_per_million
+    ) / Decimal("1000000")
+    return cost, "estimated", pricing.revision
 
 
 class LLMUsageCollector(BaseCallbackHandler):
     """Collect usage for one audit without retaining prompts or model content."""
 
-    def __init__(self, *, provider: str, model: str) -> None:
+    def __init__(
+        self,
+        *,
+        provider: str,
+        model: str,
+        pricing: LLMPricing | None = None,
+    ) -> None:
         self.provider = provider
         self.model = model
+        self.pricing = pricing
         self._lock = threading.RLock()
         self._active: dict[UUID, _ActiveCall] = {}
         self._calls: list[LLMCallUsage] = []
@@ -355,6 +467,15 @@ class LLMUsageCollector(BaseCallbackHandler):
             cached_input_tokens = None
             reasoning_tokens = None
 
+        estimated_cost, cost_status, pricing_revision = _estimate_cost(
+            usage_status=usage_status,
+            model=self.model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cached_input_tokens=cached_input_tokens,
+            pricing=self.pricing,
+        )
+
         return AuditLLMUsage(
             usage_status=usage_status,
             provider=self.provider,
@@ -367,5 +488,8 @@ class LLMUsageCollector(BaseCallbackHandler):
             total_tokens=total_tokens,
             cached_input_tokens=cached_input_tokens,
             reasoning_tokens=reasoning_tokens,
+            estimated_cost_usd=estimated_cost,
+            cost_status=cost_status,
+            pricing_revision=pricing_revision,
             calls=calls,
         )

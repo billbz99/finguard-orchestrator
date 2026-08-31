@@ -77,7 +77,7 @@ def test_submit_audit_uses_endpoint_and_handles_success(monkeypatch):
         "Audit TXN-1",
         base_url="http://backend:8000/",
     )
-    report, cache_status, latency = api_client.prepare_ui_result(response)
+    report, cache_status, latency, telemetry = api_client.prepare_ui_result(response)
 
     assert len(calls) == 1
     request, timeout = calls[0]
@@ -88,6 +88,64 @@ def test_submit_audit_uses_endpoint_and_handles_success(monkeypatch):
     assert report == payload["report"]
     assert cache_status == "CACHE HIT 🟢"
     assert latency == 12.5
+    assert telemetry == {
+        "logical_calls": "Unavailable",
+        "total_tokens": "Usage unavailable",
+        "estimated_cost": "Cost unavailable",
+    }
+
+
+def test_ui_formats_estimated_cost_from_backend_without_calculating_it():
+    payload = successful_payload()
+    payload["observability"] = {
+        "llm_usage": {
+            "logical_call_count": 3,
+            "total_tokens": 125,
+            "estimated_cost_usd": "0.0012345",
+            "cost_status": "estimated",
+        }
+    }
+    *_, telemetry = api_client.prepare_ui_result(payload)
+    assert telemetry == {
+        "logical_calls": "3",
+        "total_tokens": "125",
+        "estimated_cost": "$0.001234 estimated",
+    }
+
+
+def test_ui_formats_zero_cost_and_unavailable_pricing():
+    payload = successful_payload()
+    payload["observability"] = {
+        "llm_usage": {
+            "logical_call_count": 0,
+            "total_tokens": 0,
+            "estimated_cost_usd": "0",
+            "cost_status": "not_applicable",
+        }
+    }
+    *_, telemetry = api_client.prepare_ui_result(payload)
+    assert telemetry["estimated_cost"] == "$0.00 estimated"
+
+    payload["observability"]["llm_usage"].update(
+        logical_call_count=3,
+        total_tokens=125,
+        estimated_cost_usd=None,
+        cost_status="pricing_not_configured",
+    )
+    *_, telemetry = api_client.prepare_ui_result(payload)
+    assert telemetry["total_tokens"] == "125"
+    assert telemetry["estimated_cost"] == "Cost unavailable"
+
+
+def test_streamlit_uses_backend_telemetry_without_hard_coded_cost():
+    source = (ROOT / "src" / "ui" / "app.py").read_text(encoding="utf-8")
+    client_source = (ROOT / "src" / "ui" / "api_client.py").read_text(
+        encoding="utf-8"
+    )
+    assert "$0.02" not in source
+    assert "estimated_cost_usd" not in source
+    assert "PER_MILLION" not in source
+    assert "PER_MILLION" not in client_source
 
 
 def test_connection_error_is_safe_and_not_retried(monkeypatch):

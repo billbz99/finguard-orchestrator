@@ -77,7 +77,9 @@ if run_audit and query:
     with st.status("Submitting audit to FinGuard API...", expanded=True) as status:
         try:
             api_response = submit_audit(query)
-            final_report, cache_status, latency = prepare_ui_result(api_response)
+            final_report, cache_status, latency, telemetry = prepare_ui_result(
+                api_response
+            )
         except AuditApiError as exc:
             status.update(label="Audit request failed", state="error")
             st.error(str(exc))
@@ -135,7 +137,9 @@ if run_audit and query:
 
     # ----------------- TELEMETRY & DIAGNOSTICS -----------------
     with st.expander("🛠️ Developer Telemetry & Diagnostics", expanded=True):
-        t1, t2, t3 = st.columns(3)
+        t1, t2, t3, t4, t5 = st.columns(5)
         t1.metric("Semantic Cache Status", cache_status)
         t2.metric("Execution Latency", f"{latency:.1f} ms")
-        t3.metric("Est. API Token Cost", "$0.00" if cache_status == "CACHE HIT 🟢" else "$0.02")
+        t3.metric("Logical LLM Calls", telemetry["logical_calls"])
+        t4.metric("Total Tokens", telemetry["total_tokens"])
+        t5.metric("Est. Provider Cost", telemetry["estimated_cost"])

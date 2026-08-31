@@ -16,6 +16,7 @@ from src.ingestion.retriever import RuntimeAssetError, validate_retrieval_assets
 from src.observability.llm_usage import (
     AuditObservability,
     LLMUsageCollector,
+    load_xai_pricing,
 )
 from src.utils.cache import (
     get_semantic_cache,
@@ -115,6 +116,7 @@ async def execute_audit(request: AuditRequest):
     usage_collector = LLMUsageCollector(
         provider="xAI",
         model=os.getenv("XAI_MODEL", "grok-4.3"),
+        pricing=load_xai_pricing(),
     )
     
     # 1. Check Redis / In-Memory Semantic Cache
