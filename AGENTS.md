@@ -9,9 +9,11 @@ Preserve existing behavior unless the user explicitly asks to change it. Do not 
 ## Architecture and important paths
 
 - `src/main.py`: FastAPI app, request/response schemas, semantic-cache lookup, deterministic pre-routing, async graph invocation, and cache storage. The compiled graph is created at import time.
-- `src/ui/app.py`: Streamlit audit cockpit. It mirrors the cache -> pre-router -> graph flow and lazily caches the compiled graph.
+- `src/ui/app.py`: Streamlit audit cockpit. It is a thin HTTP client: it submits the operator's query to the FastAPI `/api/v1/audit` endpoint and renders the returned report, cache status, and observability telemetry. It does not invoke the cache, pre-router, or graph directly and does not hold a compiled graph instance.
+- `src/ui/api_client.py`: the Streamlit-to-FastAPI HTTP boundary. Builds the `/api/v1/audit` request, validates the response envelope, and formats latency/telemetry for display without recomputing cost or usage locally.
 - `src/graph/state.py`: `AgentState`, the shared LangGraph `TypedDict`. It is the source of truth for graph state keys.
 - `src/graph/schemas.py`: Pydantic structured-output contracts: `TransactionExtraction`, `AMLAssessment`, `CriticAssessment`, and final `ComplianceReport`.
+- `src/graph/evidence_policy.py`: deterministic evidence-policy layer. `evaluate_evidence_policy` maps the AML assessment's typed `required_evidence_gaps` to a `DeficiencyType` (`NONE`, `TRANSACTION`, `REGULATORY`, `MATERIAL_CONFLICT`) and an `is_finalizable` decision. `aml_audit_node` and `auditor_critic_node` use this decision to enforce which failure types and workflow actions are legal, overriding an LLM-proposed critic action that is inconsistent with the typed gaps rather than trusting it directly.
 - `src/graph/nodes.py`: extraction, retrieval/AML reasoning, critic, and deterministic report-generation nodes.
 - `src/graph/workflow.py`: graph topology and conditional routing. Current flow is `extraction -> aml_audit -> auditor_critic`; the critic routes either back to `aml_audit` or onward to `generation -> END`.
 - `src/graph/pre_router.py`: zero-LLM deterministic bypass for requests that do not meet escalation criteria.
@@ -140,6 +142,13 @@ For changes to graph logic, add unit tests with fake/injected LLM and retriever 
 - `.env.example` is the committed template and must contain placeholders only. The active LLM client currently requires `XAI_API_KEY` and defaults `XAI_MODEL` to `grok-4.3`. README references to OpenAI/LangSmith describe other or optional tooling; verify code before assuming a key is consumed.
 - LangSmith/DeepEval/OpenAI settings may enable remote tracing or evaluation. Do not send proprietary or personally identifiable transaction data to external services. Use synthetic/redacted fixtures.
 - Do not print secret-bearing environment variables. Error messages returned by FastAPI should not expose credentials, full provider payloads, or sensitive retrieved context.
+
+## Commit and attribution conventions
+
+- Do not add `Co-Authored-By` trailers, "Generated with" lines, session links, or any
+  other AI-attribution content to commit messages or pull request descriptions in this
+  repository unless the user explicitly requests it for that specific commit or PR.
+- This applies to any coding agent working in this repository, regardless of vendor.
 
 ## Change checklist
 
