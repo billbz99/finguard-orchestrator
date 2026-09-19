@@ -125,16 +125,17 @@ Run live/evaluation checks only when their prerequisites and cost are appropriat
 ```bash
 uv run pytest tests/eval_suite.py -v
 uv run python test_grok.py
+uv run pytest tests/test_golden_scenarios_real_model.py -v
 ```
 
-`tests/eval_suite.py` uses DeepEval with an external `gpt-4o` judge and therefore needs compatible credentials/network access and may incur cost. `test_grok.py` calls the configured xAI model directly. Never run paid or live-provider tests casually, and never weaken assertions merely to make a flaky external evaluation pass.
+`tests/eval_suite.py` uses DeepEval with an external `gpt-4o` judge and therefore needs compatible credentials/network access and may incur cost. `test_grok.py` calls the configured xAI model directly. `tests/test_golden_scenarios_real_model.py` (marked `real_model_eval`, excluded from the default `pytest` run) replays selected golden scenarios against the configured xAI model; it requires `FINGUARD_RUN_REAL_MODEL_EVAL=1`, and honors the optional `FINGUARD_REAL_MODEL_SCENARIOS` (comma-separated scenario IDs) and `FINGUARD_REAL_MODEL_MAX_SCENARIOS` (caps how many scenarios run) environment variables. Never run paid or live-provider tests casually, and never weaken assertions merely to make a flaky external evaluation pass.
 
 For changes to graph logic, add unit tests with fake/injected LLM and retriever dependencies where possible; cover partial state updates, all conditional routes, the loop limit, insufficient evidence, and final schema shape. For retrieval changes, test filtering, empty results, ordering, score cutoffs, stable IDs, and metadata preservation. For API changes, cover cache hit, deterministic bypass, graph success, validation errors, and graph failure without requiring real providers.
 
 ## Secrets, credentials, and sensitive data
 
 - Keep credentials only in the ignored root `.env` or the runtime secret manager. Never commit `.env`, API keys, Redis credentials, tokens, customer data, raw production transactions, or secrets in prompts, tests, logs, screenshots, fixtures, tracing metadata, or generated reports.
-- `.env.example` is the committed template and must contain placeholders only. The active LLM client currently requires `XAI_API_KEY` and defaults `XAI_MODEL` to `grok-4.3`. README references to OpenAI/LangSmith describe other or optional tooling; verify code before assuming a key is consumed.
+- `.env.example` is the committed template and must contain placeholders only. FinGuard application code uses `XAI_API_KEY` for its primary hosted LLM path (`src/llm/client.py`), defaulting `XAI_MODEL` to `grok-4.3`. `OPENAI_API_KEY` is evaluation-only: it is associated with the DeepEval `gpt-4o` judge in `tests/eval_suite.py` and is not required for normal application startup or audits.
 - LangSmith/DeepEval/OpenAI settings may enable remote tracing or evaluation. Do not send proprietary or personally identifiable transaction data to external services. Use synthetic/redacted fixtures.
 - Do not print secret-bearing environment variables. Error messages returned by FastAPI should not expose credentials, full provider payloads, or sensitive retrieved context.
 

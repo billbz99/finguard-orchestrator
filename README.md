@@ -138,8 +138,10 @@ variables and matched to the configured model; FinGuard does not embed provider 
 in the UI. The telemetry reports explicit states such as `estimated`,
 `pricing_not_configured`,
 `model_mismatch`, `usage_unavailable`, or `not_applicable` rather than inventing a cost.
-LangSmith tracing can be enabled through the standard LangChain/LangSmith environment
-configuration; tracing metadata excludes the full transaction payload and credentials.
+LangSmith tracing is optional and off unless you configure it. FinGuard does not define
+its own tracing variables; enable it through LangChain/LangSmith's standard environment
+configuration (see LangSmith's own documentation for the exact variable names). Tracing
+metadata excludes the full transaction payload and credentials.
 
 ## Evaluation strategy
 
