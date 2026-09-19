@@ -27,28 +27,23 @@ Preserve existing behavior unless the user explicitly asks to change it. Do not 
 - `src/utils/pdf_generator.py` and `src/utils/pdf_regulatory_generator.py`: local sample SWIFT and regulatory-PDF generators.
 - `tests/`: loader and vector-store tests, a retrieval smoke test, and DeepEval quality evaluation. `test_grok.py` is a root-level live LLM smoke script, not part of pytest's configured `tests/` discovery.
 - `data/processed/swift_transactions.txt`: checked-in sample transaction corpus. `data/raw/`, `data/chroma/`, and `data/test_chroma/` are generated/ignored artifacts.
-- `README.md`, `pyproject.toml`, `requirements.txt`, `uv.lock`, `.env.example`, and `Dockerfile`: user documentation, packaging, environment template, and deployment configuration.
+- `README.md`, `pyproject.toml`, `uv.lock`, `.env.example`, and `Dockerfile`: user documentation, packaging, environment template, and deployment configuration.
 
 There are currently two Chroma integration paths. Ingestion through `VectorStoreManager` uses `sentence-transformers/all-MiniLM-L6-v2` via LangChain, while `FinGuardRetriever` opens the persisted collection with Chroma's `DefaultEmbeddingFunction` and reranks with `BAAI/bge-reranker-large`. Treat embedding model, collection name (`finguard_knowledge_base`), persistence path (`data/chroma`), metadata, and score thresholds as a compatibility contract. Do not change one side in isolation.
 
 ## Environment and package management
 
-Python 3.11 is selected by `.python-version`. `uv.lock` is checked in, so prefer the locked environment for reproducibility:
+`pyproject.toml` defines the project's direct dependencies, and `uv.lock` is the resolved lockfile — the single canonical, reproducible dependency source for this project. Python 3.11 is selected by `.python-version`. `uv.lock` is checked in, so prefer the locked environment for reproducibility:
 
 ```bash
-uv sync
+uv sync --frozen
 ```
 
-The README's existing bootstrap path is also supported:
-
-```bash
-uv venv
-uv pip install -r requirements.txt
-```
+`pip install -e .` (documented in README.md as an optional pip-only fallback) installs the direct dependencies declared in `pyproject.toml`, but it resolves versions at install time and is not pinned to `uv.lock`; it is not the locked/reproducible path.
 
 On Windows, executables can be invoked as `.venv\Scripts\python.exe`, `.venv\Scripts\pytest.exe`, and so on; on POSIX, activate with `source .venv/bin/activate`. Use `uv run <command>` when practical to avoid activation assumptions.
 
-`pyproject.toml`, `requirements.txt`, and the imports are not perfectly aligned: for example, `requirements.txt` directly lists LangGraph, pandas, NumPy, and python-multipart, while other runtime packages appear only in `pyproject.toml` or transitively. Do not normalize dependency files unless dependency maintenance is explicitly in scope. When adding a genuine direct dependency, update the appropriate declared source(s) and lockfile consistently, and explain the choice.
+When adding a genuine direct dependency, update `pyproject.toml` and `uv.lock` consistently, and explain the choice.
 
 Useful commands:
 

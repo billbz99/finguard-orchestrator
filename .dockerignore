@@ -40,7 +40,4 @@ test_grok.py
 huggingface/
 models/
 
-# Dependency input not used by the locked container build
-requirements.txt
-
 # Keep the validated runtime seed under data/chroma included.

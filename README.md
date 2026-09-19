@@ -206,8 +206,14 @@ See the test markers in `pyproject.toml` before running provider-backed evaluati
 ```bash
 git clone https://github.com/billbz99/finguard-orchestrator.git
 cd finguard-orchestrator
-uv sync
+uv sync --frozen
 ```
+
+`uv sync --frozen` is the canonical, reproducible setup path: it installs exactly what's
+recorded in the checked-in `uv.lock` without re-resolving. If you only have `pip`
+available, `pip install -e .` will install FinGuard's direct dependencies from
+`pyproject.toml`, but it resolves versions at install time and is not pinned to
+`uv.lock` — it is not the locked/reproducible installation path.
 
 Copy `.env.example` to `.env` and configure only the capabilities you intend to use:
 
