@@ -179,3 +179,46 @@ def prepare_diagnostics(payload: dict[str, Any]) -> dict[str, Any]:
         "investigation_status": display(investigation.get("status")),
         "calls": calls, "retrieval_passes": passes, "scores": scores,
     }
+
+
+def risk_display(report: dict[str, Any]) -> str:
+    """Keep supported risk levels distinct, without treating unknown as LOW."""
+    risk = report.get("risk_rating")
+    return risk.upper() if isinstance(risk, str) and risk.upper() in {"LOW", "MEDIUM", "HIGH"} else "UNAVAILABLE"
+
+
+def prepare_explanation(report: dict[str, Any]) -> dict[str, Any] | None:
+    """Allowlist report explanation fields; never combine with request telemetry."""
+    explanation = report.get("explainability")
+    if not isinstance(explanation, dict):
+        return None
+    def items(value):
+        return value if isinstance(value, list) else []
+    def text(value):
+        return value if isinstance(value, str) else None
+    evidence_fields = ("evidence_reference", "indexed_document_id", "source_label", "document_type",
+                       "evidence_role", "record_locator", "chunk_locator", "jurisdiction")
+    evidence = [{key: (item.get(key) if key == "chunk_locator"
+                       and isinstance(item.get(key), int) and not isinstance(item.get(key), bool)
+                       else text(item.get(key))) for key in evidence_fields}
+                for item in items(explanation.get("admitted_evidence")) if isinstance(item, dict)]
+    references = {item["evidence_reference"] for item in evidence if isinstance(item["evidence_reference"], str)}
+    def links(value):
+        return [{key: item.get(key) for key in ("claim", "evidence_references", "support_summary")}
+                for item in items(value) if isinstance(item, dict)
+                and isinstance(item.get("claim"), str) and isinstance(item.get("support_summary"), str)
+                and isinstance(item.get("evidence_references"), list)
+                and item["evidence_references"]
+                and all(isinstance(ref, str) and ref in references for ref in item["evidence_references"])]
+    return {
+        "suspicious_patterns": [item for item in items(explanation.get("suspicious_patterns")) if isinstance(item, str)],
+        "assessment_summary": explanation.get("assessment_summary") if isinstance(explanation.get("assessment_summary"), str) else report.get("audit_summary", ""),
+        "required_evidence_gaps": [item for item in items(explanation.get("required_evidence_gaps")) if isinstance(item, str)],
+        "admitted_evidence": evidence,
+        "finding_attributions": links(explanation.get("finding_attributions")),
+        "regulation_attributions": links(explanation.get("regulation_attributions")),
+        "attribution_status": text(explanation.get("attribution_status")) or "unavailable",
+        "critic_action": text(explanation.get("critic_action")),
+        "critic_failure_type": text(explanation.get("critic_failure_type")),
+        "refinement_occurred": explanation.get("refinement_occurred") if isinstance(explanation.get("refinement_occurred"), bool) else None,
+    }

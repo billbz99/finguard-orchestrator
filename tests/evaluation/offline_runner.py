@@ -45,6 +45,13 @@ def _response_plan(scenario: GoldenScenario):
         flagged_transactions=_matcher_value(expected.aml_assessment.flagged_transactions), applicable_regulations=_matcher_value(expected.aml_assessment.applicable_regulations),
         required_evidence_gaps=final_gaps,
         reasoning_summary="Synthetic offline replay assessment.", insufficient_evidence=_matcher_value(expected.aml_assessment.insufficient_evidence),
+        evidence_attribution={
+            category: [{"claim": claim, "evidence_references": references,
+                        "support_summary": "Synthetic offline attribution fixture; not a grounding evaluation."}
+                       for claim, references in (relationships or {}).items()]
+            for category, relationships in (("findings", expected.report.finding_evidence),
+                                            ("regulations", expected.report.regulation_evidence))
+        } if expected.report.finding_evidence is not None or expected.report.regulation_evidence is not None else None,
     )
     assessments = [final.model_copy(update={"risk_rating": "Low", "suspicious_patterns": [], "flagged_transactions": [], "applicable_regulations": [], "required_evidence_gaps": ["REGULATORY_CONTEXT"], "reasoning_summary": "Synthetic offline replay requires more regulatory context.", "insufficient_evidence": True}) if action == "RETRIEVE_MORE" and index < len(actions) - 1 else final for index, action in enumerate(actions)]
     critics = [CriticAssessment(is_sufficient=action == "GENERATE", missing_evidence=[] if action == "GENERATE" else ["synthetic evidence"], failure_type=failure_type, recommended_action=action, critique=f"Synthetic offline replay selected {action}.") for action, failure_type in zip(actions, failure_types, strict=True)]

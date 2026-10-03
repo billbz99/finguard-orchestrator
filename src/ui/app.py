@@ -8,6 +8,8 @@ from src.ui.api_client import (
     format_latency_ms,
     prepare_ui_result,
     prepare_diagnostics,
+    prepare_explanation,
+    risk_display,
     submit_audit,
 )
 
@@ -97,7 +99,7 @@ if run_audit and query:
     st.subheader("📋 Compliance Summary Report")
     
     assessment_status = final_report.get("assessment_status")
-    risk = final_report.get("risk_rating", "LOW")
+    risk = risk_display(final_report)
     if assessment_status == "INSUFFICIENT_EVIDENCE":
         st.warning(
             "Assessment status: INSUFFICIENT EVIDENCE. FinGuard could not reach "
@@ -106,8 +108,12 @@ if run_audit and query:
     elif assessment_status == "COMPLETE":
         if risk == "HIGH":
             st.markdown('### Risk Assessment: <span class="badge-high">HIGH RISK</span>', unsafe_allow_html=True)
-        else:
+        elif risk == "MEDIUM":
+            st.warning("Risk Assessment: MEDIUM RISK")
+        elif risk == "LOW":
             st.markdown('### Risk Assessment: <span class="badge-low">LOW RISK</span>', unsafe_allow_html=True)
+        else:
+            st.write("Risk Assessment: Unavailable")
     else:
         st.error(
             "Assessment status is missing or invalid. Do not interpret this report "
@@ -119,7 +125,7 @@ if run_audit and query:
         st.markdown("**Flagged Transactions:**")
         wires = final_report.get("flagged_wires", [])
         if wires:
-            df = pd.DataFrame({"Transaction Reference ID": wires, "Status": ["FLAGGED FOR SAR"] * len(wires)})
+            df = pd.DataFrame({"Transaction Reference ID": wires, "Status": ["REQUIRES AML REVIEW"] * len(wires)})
             st.dataframe(df, use_container_width=True)
         else:
             st.write("None flagged.")
@@ -133,13 +139,51 @@ if run_audit and query:
         st.info(final_report.get("audit_summary", "No findings reported."))
 
     # ----------------- AUDITOR CITATIONS DRAWER -----------------
-    with st.expander("📚 Auditor's Verified Citations & Cryptographic Hashes", expanded=False):
+    with st.expander("📚 Assessment Source Labels", expanded=False):
         hashes = final_report.get("source_document_hashes", [])
         if hashes:
             for h in hashes:
-                st.code(f"Source Authority: {h}", language="text")
+                st.code(f"Source label: {h}", language="text")
         else:
-            st.write("No external source hashes cited.")
+            st.write("No external source labels available.")
+
+    st.subheader("Why this transaction requires review")
+    explanation = prepare_explanation(final_report)
+    if explanation is None:
+        st.caption("Evidence detail unavailable for this report.")
+    else:
+        if cache_status == "HIT":
+            st.caption("This explanation belongs to the cached assessment; it has not been reassessed against this request.")
+        st.write(explanation["assessment_summary"])
+        st.markdown("**AML indicators / findings**")
+        for pattern in explanation["suspicious_patterns"]:
+            st.write(pattern)
+        if not explanation["suspicious_patterns"]:
+            st.write("No suspicious patterns identified in this assessment.")
+        st.caption("Supporting links are model-attributed. Reference validation confirms admitted-source membership, not semantic proof or illegality.")
+        for title, links in (("Finding support", explanation["finding_attributions"]),
+                             ("Regulation / guidance support", explanation["regulation_attributions"])):
+            st.markdown(f"**{title}**")
+            for link in links:
+                st.write(link["claim"])
+                st.write(link["support_summary"])
+                st.caption("Evidence references: " + ", ".join(link["evidence_references"]))
+            if not links:
+                st.write("Model-attributed support unavailable.")
+        st.markdown("**Evidence supplied to the final assessment**")
+        st.caption("Transaction records concern transaction facts; regulatory guidance concerns standards and does not prove transaction behavior.")
+        if explanation["admitted_evidence"]:
+            st.dataframe(pd.DataFrame(explanation["admitted_evidence"]), use_container_width=True)
+        else:
+            st.write("No indexed evidence provenance available.")
+        if explanation["required_evidence_gaps"]:
+            st.markdown("**Required evidence gaps**")
+            for gap in explanation["required_evidence_gaps"]:
+                st.write(gap.replace("_", " ").title())
+        if explanation["critic_action"]:
+            st.caption(f"Final review outcome: {explanation['critic_action']} | Evidence category: {explanation['critic_failure_type'] or 'Unavailable'}")
+        if explanation["refinement_occurred"] is True:
+            st.caption("Additional regulatory retrieval occurred. Only final-assessment evidence is shown.")
 
     # ----------------- TELEMETRY & DIAGNOSTICS -----------------
     with st.expander("🛠️ Developer Telemetry & Diagnostics", expanded=True):

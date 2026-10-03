@@ -42,7 +42,7 @@ def test_deterministic_report_is_complete_and_schema_valid():
     report = run_deterministic_ach_check({"query": "Monthly payroll"})
 
     assert report["assessment_status"] == "COMPLETE"
-    assert ComplianceReport.model_validate(report).model_dump() == report
+    assert ComplianceReport.model_validate(report).model_dump(exclude_none=True) == report
 
 
 def test_current_cached_report_preserves_assessment_status():

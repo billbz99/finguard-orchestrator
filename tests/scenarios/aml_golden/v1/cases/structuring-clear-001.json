@@ -77,7 +77,8 @@
       "risk_rating": {"match": "exact", "value": "HIGH"},
       "flagged_wires": {"match": "exact", "value": ["TXN-SYN-100", "TXN-SYN-101", "TXN-SYN-102", "TXN-SYN-103"]},
       "applicable_regulations": {"match": "subset", "values": ["FINRA Rule 3310", "31 U.S.C. 5324"]},
-      "source_document_hashes": {"match": "subset", "values": ["synthetic_structuring_guidance.txt", "synthetic_finra_3310.txt"]}
+      "source_document_hashes": {"match": "subset", "values": ["synthetic_structuring_guidance.txt", "synthetic_finra_3310.txt"]},
+      "regulation_evidence": {"FINRA Rule 3310": ["P1-E2"]}
     },
     "execution": {
       "retrieval_count": {"match": "exact", "value": 1},

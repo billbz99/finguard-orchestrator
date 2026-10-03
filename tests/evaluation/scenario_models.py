@@ -135,6 +135,8 @@ class ReportExpectation(StrictModel):
     flagged_wires: Matcher
     applicable_regulations: Matcher
     source_document_hashes: Matcher
+    finding_evidence: dict[str, list[str]] | None = None
+    regulation_evidence: dict[str, list[str]] | None = None
 
 
 class ExecutionExpectation(StrictModel):

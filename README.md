@@ -122,6 +122,39 @@ cache whose maximum entry count is controlled by
 optional experimental mode for environments that separately provide Redis. Redis is
 not part of the validated AWS runtime and is not required to run FinGuard.
 
+### Evidence and explainability
+
+Agentic reports include an optional `explainability` business section with the
+existing assessment summary, suspicious patterns, required evidence gaps, final
+critic outcome, refinement indicator, and an allowlisted registry of evidence
+actually admitted to the final AML pass. The existing AML call receives labelled
+blocks such as `P1-E1`; pass-scoped references prevent an earlier refinement pass
+from being cited as final evidence. Registry fields include indexed identity,
+source label, document type/role, and available record/chunk/jurisdiction locators.
+No document text, arbitrary metadata, retrieval scores, prompts, or provider
+payloads are added to this section.
+
+Optional model attributions link exact existing patterns or regulations to those
+references and contain a concise analyst-facing support statement. Reference
+validation checks membership in final admitted evidence, not semantic proof.
+Regulatory guidance concerns standards and does not prove transaction behavior.
+Unknown references or claims discard the entire affected link; malformed or
+missing attribution remains unavailable and never changes risk, evidence policy,
+critic routing, or assessment status. This adds no LLM call and requests no private
+chain-of-thought. Model-authored summaries still require analyst review.
+
+Legacy reports and deterministic bypass reports can omit explainability. The UI
+shows an unavailable fallback. A cached explanation remains part of its originating
+report and is never combined with fresh request facts or retrieval provenance;
+semantic similarity does not constitute a fresh assessment. Runtime observability
+continues to report new work separately. `source_document_hashes` remains the legacy
+field name for source labels (usually filenames), not cryptographic content hashes
+or verified citations.
+
+Golden contracts optionally assert finding/regulation evidence-reference
+relationships. Offline replay validates contracts/routing using fakes, not real
+model grounding; provider-backed evaluation remains separately opt-in.
+
 ### Request-scoped LLM observability
 
 API responses can include request-scoped telemetry for:
