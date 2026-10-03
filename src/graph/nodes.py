@@ -4,6 +4,8 @@ import json
 import re
 import threading
 from typing import Any, Dict
+from langchain_core.runnables import RunnableConfig
+from src.observability.investigation import observe
 from src.graph.evidence_policy import DeficiencyType, evaluate_evidence_policy
 from src.graph.state import AgentState
 from src.graph.schemas import (
@@ -104,7 +106,7 @@ def extraction_node(state: AgentState) -> Dict[str, Any]:
         "extracted_entities": extracted_entities,
     }
 
-def aml_audit_node(state: AgentState) -> Dict[str, Any]:
+def aml_audit_node(state: AgentState, config: RunnableConfig | None = None) -> Dict[str, Any]:
     """Executes vector retrieval against ChromaDB and performs AML reasoning."""
 
     print(
@@ -123,12 +125,16 @@ def aml_audit_node(state: AgentState) -> Dict[str, Any]:
             "Currency Transaction Reporting thresholds"
         )
 
+    observer = (config or {}).get("configurable", {}).get("investigation_collector")
+    pass_index = state.get("loop_count", 0) + 1
+    observer_options = {"observer": observer, "pass_index": pass_index} if observer is not None else {}
     chunks = retriever.retrieve(
         query=query,
         doc_type=state.get("doc_type"),
         jurisdiction=state.get("jurisdiction"),
         top_k_vector=10,
-        top_n_final=3
+        top_n_final=3,
+        **observer_options,
     )
 
     # Filter out chunks below threshold score 0.15
@@ -136,6 +142,7 @@ def aml_audit_node(state: AgentState) -> Dict[str, Any]:
         c for c in chunks
         if c.get("rerank_score", 0.0) >= 0.15
     ]
+    observe(observer, "record_admission", pass_index, len(valid_chunks))
 
     print(
         f"[AML Audit Node] Found {len(valid_chunks)} "

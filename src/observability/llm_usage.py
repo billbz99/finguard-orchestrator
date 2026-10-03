@@ -11,6 +11,7 @@ from uuid import UUID
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 from pydantic import BaseModel, ConfigDict, Field
+from src.observability.investigation import InvestigationDiagnostics
 
 
 CallUsageStatus = Literal["reported", "unavailable", "failed"]
@@ -103,6 +104,7 @@ class LLMCallUsage(BaseModel):
     reasoning_tokens: int | None = Field(default=None, ge=0)
     latency_ms: float | None = Field(default=None, ge=0)
     provider_request_id: str | None = None
+    reported_model: str | None = None
 
 
 class AuditLLMUsage(BaseModel):
@@ -125,6 +127,8 @@ class AuditLLMUsage(BaseModel):
     cost_status: CostStatus
     pricing_revision: str | None = None
     calls: list[LLMCallUsage] = Field(default_factory=list)
+    total_latency_ms: float | None = Field(default=None, ge=0)
+    latency_status: AuditUsageStatus = "unavailable"
 
 
 class AuditObservability(BaseModel):
@@ -133,6 +137,7 @@ class AuditObservability(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     llm_usage: AuditLLMUsage
+    investigation: InvestigationDiagnostics | None = None
 
 
 @dataclass(frozen=True)
@@ -265,6 +270,8 @@ def no_llm_usage(*, provider: str, model: str) -> AuditLLMUsage:
         estimated_cost_usd=Decimal("0"),
         cost_status="not_applicable",
         calls=[],
+        total_latency_ms=0,
+        latency_status="not_applicable",
     )
 
 
@@ -386,6 +393,13 @@ class LLMUsageCollector(BaseCallbackHandler):
             if active is None:
                 return
             usage, request_id = _extract_usage(response)
+            message = _message_from_result(response)
+            metadata = getattr(message, "response_metadata", None) or {}
+            reported_model = (
+                metadata.get("model_name") or metadata.get("model")
+                or (response.llm_output or {}).get("model_name")
+                or (response.llm_output or {}).get("model")
+            )
             reported = all(
                 usage[key] is not None
                 for key in ("input_tokens", "output_tokens", "total_tokens")
@@ -396,6 +410,7 @@ class LLMUsageCollector(BaseCallbackHandler):
                 usage_status="reported" if reported else "unavailable",
                 latency_ms=round((time.monotonic() - active.started_at) * 1000, 3),
                 provider_request_id=request_id,
+                reported_model=reported_model if isinstance(reported_model, str) else None,
                 **usage,
             )
             with self._lock:
@@ -476,6 +491,12 @@ class LLMUsageCollector(BaseCallbackHandler):
             pricing=self.pricing,
         )
 
+        durations = [call.latency_ms for call in calls if call.latency_ms is not None]
+        latency_status = (
+            "reported" if len(durations) == logical_call_count and active_count == 0
+            else "partial" if durations else "unavailable"
+        )
+
         return AuditLLMUsage(
             usage_status=usage_status,
             provider=self.provider,
@@ -492,4 +513,6 @@ class LLMUsageCollector(BaseCallbackHandler):
             cost_status=cost_status,
             pricing_revision=pricing_revision,
             calls=calls,
+            total_latency_ms=round(sum(durations), 3) if durations else None,
+            latency_status=latency_status,
         )

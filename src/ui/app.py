@@ -7,6 +7,7 @@ from src.ui.api_client import (
     AuditApiError,
     format_latency_ms,
     prepare_ui_result,
+    prepare_diagnostics,
     submit_audit,
 )
 
@@ -160,3 +161,22 @@ if run_audit and query:
             telemetry["estimated_cost"],
             help=f"Backend cost status: {telemetry['cost_status']}",
         )
+        diagnostics = prepare_diagnostics(api_response)
+        st.write(f"Configured provider/model: {diagnostics['provider']} / {diagnostics['configured_model']}")
+        st.write(f"Response-reported model: {diagnostics['reported_models']}")
+        d1, d2, d3, d4, d5 = st.columns(5)
+        d1.metric("Input Tokens", diagnostics["input_tokens"])
+        d2.metric("Output Tokens", diagnostics["output_tokens"])
+        d3.metric("Summed LLM Latency", diagnostics["llm_latency"],
+                  help=f"Sum of available model-call durations; status: {diagnostics['latency_status']}. Separate from total API latency.")
+        d4.metric("Critic Passes", diagnostics["critic_passes"])
+        d5.metric("Refinements", diagnostics["refinements"])
+        st.caption(f"Investigation diagnostics status: {diagnostics['investigation_status']}")
+        for title, rows in (("LLM Calls", diagnostics["calls"]),
+                            ("Retrieval per AML Pass", diagnostics["retrieval_passes"]),
+                            ("Developer Retrieval Scores", diagnostics["scores"])):
+            st.markdown(f"**{title}**")
+            if rows:
+                st.dataframe(pd.DataFrame(rows), use_container_width=True)
+            else:
+                st.write("No observations available.")

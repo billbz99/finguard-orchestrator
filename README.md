@@ -130,8 +130,21 @@ API responses can include request-scoped telemetry for:
 - input, cached-input, output, reasoning, and total tokens when the provider reports
   them;
 - per-call latency and overall API execution latency;
+- summed available LLM-call latency with a separate completeness status;
+- configured model and response-reported model identity when supplied;
+- critic-pass and refinement counts, plus per-pass vector, reranked, shortlist,
+  and admitted evidence counts;
+- developer-only candidate distances, rerank scores, and shortlist/admission
+  membership, without document text or arbitrary metadata;
 - semantic-cache status;
 - estimated provider cost and pricing revision.
+
+`observability.investigation` retains retrieval history across refinement passes.
+Critic passes follow the existing `loop_count`; completed investigations have
+one fewer refinement than critic passes. Missing observations remain unavailable
+or partial, distinct from zero new work on cache hits and deterministic bypasses.
+Summed LLM latency is not total API latency and may be a partial sum. Diagnostics
+are request-scoped, remain outside graph state, and are never cached with reports.
 
 Cost estimation is configuration-driven. Rates are supplied through environment
 variables and matched to the configured model; FinGuard does not embed provider prices

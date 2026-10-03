@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import chromadb
 from chromadb.utils import embedding_functions
+from src.observability.investigation import observe
 
 
 class RuntimeAssetError(RuntimeError):
@@ -145,7 +146,9 @@ class FinGuardRetriever:
         top_n_final: int = 5,
         doc_type: Optional[str] = None,
         entity_bic: Optional[str] = None,
-        jurisdiction: Optional[str] = None
+        jurisdiction: Optional[str] = None,
+        observer: Any = None,
+        pass_index: int = 1,
     ) -> List[Dict[str, Any]]:
         where_filter = self._build_where_clause(
             doc_type=doc_type, 
@@ -165,6 +168,8 @@ class FinGuardRetriever:
         ids = results["ids"][0] if results["ids"] else []
 
         if not documents:
+            observe(observer, "record_retrieval", pass_index,
+                    candidate_count=0, reranked_count=0, shortlist_count=0, candidates=[])
             return []
 
         sentence_pairs = [[query, doc] for doc in documents]
@@ -180,4 +185,21 @@ class FinGuardRetriever:
             })
 
         candidate_pool.sort(key=lambda x: x["rerank_score"], reverse=True)
+        if observer is not None:
+            try:
+                distances = (results.get("distances") or [[]])[0] or []
+                shortlisted = {c["id"] for c in candidate_pool[:top_n_final]}
+                observe(
+                    observer, "record_retrieval", pass_index,
+                    candidate_count=len(documents), reranked_count=len(sentence_pairs),
+                    shortlist_count=len(candidate_pool[:top_n_final]),
+                    candidates=[{
+                        "candidate_index": i + 1,
+                        "vector_distance": float(distances[i]) if i < len(distances) and distances[i] is not None else None,
+                        "rerank_score": float(rerank_scores[i]),
+                        "shortlisted": ids[i] in shortlisted,
+                    } for i in range(len(documents))],
+                )
+            except Exception:
+                pass
         return candidate_pool[:top_n_final]

@@ -133,3 +133,46 @@ def prepare_ui_result(
         float(payload["execution_latency_ms"]),
         _telemetry_display(payload),
     )
+
+
+def prepare_diagnostics(payload: dict[str, Any]) -> dict[str, Any]:
+    """Select safe diagnostics fields only; retain unavailable versus zero."""
+    envelope = payload.get("observability") or {}
+    envelope = envelope if isinstance(envelope, dict) else {}
+    usage = envelope.get("llm_usage") or {}
+    usage = usage if isinstance(usage, dict) else {}
+    investigation = envelope.get("investigation") or {}
+    investigation = investigation if isinstance(investigation, dict) else {}
+    call_fields = ("node", "call_index", "latency_ms", "usage_status", "input_tokens",
+                   "output_tokens", "total_tokens", "reported_model")
+    calls = [{key: call.get(key) for key in call_fields}
+             for call in usage.get("calls", []) if isinstance(call, dict)]
+    passes, scores = [], []
+    for observation in investigation.get("retrieval_passes", []):
+        if not isinstance(observation, dict):
+            continue
+        passes.append({key: observation.get(key) for key in
+                       ("pass_index", "candidate_count", "reranked_count", "shortlist_count", "admitted_count")})
+        for candidate in observation.get("candidates", []):
+            if isinstance(candidate, dict):
+                scores.append({"pass_index": observation.get("pass_index"), **{
+                    key: candidate.get(key) for key in
+                    ("candidate_index", "vector_distance", "rerank_score", "shortlisted", "admitted")}})
+    def display(value):
+        return "Unavailable" if value is None else str(value)
+    return {
+        "configured_model": display(usage.get("model")),
+        "provider": display(usage.get("provider")),
+        "reported_models": ", ".join(dict.fromkeys(
+            call["reported_model"] for call in calls if isinstance(call["reported_model"], str)
+        )) or "Unavailable",
+        "input_tokens": display(usage.get("input_tokens")),
+        "output_tokens": display(usage.get("output_tokens")),
+        "llm_latency": (format_latency_ms(usage["total_latency_ms"])
+                        if isinstance(usage.get("total_latency_ms"), (int, float)) else "Unavailable"),
+        "latency_status": display(usage.get("latency_status")),
+        "critic_passes": display(investigation.get("critic_pass_count")),
+        "refinements": display(investigation.get("refinement_count")),
+        "investigation_status": display(investigation.get("status")),
+        "calls": calls, "retrieval_passes": passes, "scores": scores,
+    }
