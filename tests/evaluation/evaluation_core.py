@@ -183,6 +183,23 @@ def evaluate_scenario(scenario, state, critic_responses, retrieval_queries, *, e
     report = state.get("final_report") or {}
     for field in ("assessment_status", "risk_rating", "flagged_wires", "applicable_regulations", "source_document_hashes"):
         count += _add_match(failures, field, getattr(scenario.expected.report, field), report.get(field))
+    for expectation, field in (("finding_evidence", "finding_attributions"),
+                               ("regulation_evidence", "regulation_attributions")):
+        relationships = getattr(scenario.expected.report, expectation)
+        if relationships is not None:
+            actual: dict[str, list[str]] = {}
+            for item in (report.get("explainability") or {}).get(field, []):
+                references = actual.setdefault(item["claim"], [])
+                for reference in item["evidence_references"]:
+                    if reference not in references:
+                        references.append(reference)
+            if execution_mode == "offline_replay":
+                count += _add_match(failures, expectation, ExactMatcher(match="exact", value=relationships), actual)
+            else:
+                count += 1
+                if not all(claim in actual and set(refs).issubset(actual[claim]) for claim, refs in relationships.items()):
+                    failures.append(EvaluationFailure(field=expectation, matcher="contains", expected=relationships,
+                        actual=actual, message="required evidence relationships missing"))
     execution = {"retrieval_count": len(retrieval_queries), "critic_count": len(actions), "final_loop_count": state.get("loop_count", 0), "terminates": bool(report)}
     for field, actual in execution.items():
         count += _add_match(failures, field, getattr(scenario.expected.execution, field), actual)

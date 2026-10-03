@@ -284,8 +284,9 @@ def test_api_serializes_configured_decimal_cost(monkeypatch):
     assert usage["estimated_cost_usd"] == "0.00028"
 
 
-def test_compliance_report_schema_is_unchanged_and_sensitive_content_not_logged(caplog):
+def test_compliance_report_schema_addition_and_sensitive_content_not_logged(caplog):
     assert set(ComplianceReport.model_fields) == {
+        "explainability",
         "assessment_status",
         "risk_rating",
         "flagged_wires",

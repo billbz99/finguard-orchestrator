@@ -251,6 +251,7 @@ def test_structured_generation_builds_normalized_deduplicated_report():
     report = update["final_report"]
 
     assert set(report) == {
+        "explainability",
         "assessment_status",
         "risk_rating",
         "flagged_wires",
@@ -284,6 +285,7 @@ def test_structured_generation_handles_missing_optional_state():
             "flagged_wires": [],
             "applicable_regulations": [],
             "audit_summary": "No AML assessment available.",
+            "explainability": None,
             "source_document_hashes": [],
         },
         "compliance_draft": "No AML assessment available.",
