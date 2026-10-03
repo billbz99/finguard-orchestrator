@@ -247,7 +247,7 @@ def test_aml_audit_retrieves_filters_context_and_propagates_assessment(monkeypat
     assert state["raw_query"] in llm_calls["prompt"]
     assert '"TXN-500"' in llm_calls["prompt"]
     assert "audit request and extracted entities as evidence" in llm_calls["prompt"]
-    assert "retrieved context as evidence about" in llm_calls["prompt"]
+    assert "Treat regulatory_guidance as evidence about" in llm_calls["prompt"]
     assert "Regulatory documents do not need to" in llm_calls["prompt"]
     assert "A missing field is not automatically fatal" in llm_calls["prompt"]
     assert "supported LOW/no-indicator conclusion" in llm_calls["prompt"]
@@ -278,7 +278,7 @@ def test_aml_audit_handles_empty_retrieval_and_insufficient_evidence(monkeypatch
     assert update["retrieved_context"] == []
     assert update["aml_assessment"]["insufficient_evidence"] is True
     assert update["aml_assessment"]["flagged_transactions"] == []
-    context_section = llm_calls["prompt"].split("Retrieved regulatory context:", 1)[1]
+    context_section = llm_calls["prompt"].split("Retrieved evidence (labelled):", 1)[1]
     assert context_section.strip() == ""
 
 

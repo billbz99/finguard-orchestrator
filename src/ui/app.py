@@ -147,7 +147,7 @@ if run_audit and query:
         else:
             st.write("No external source labels available.")
 
-    st.subheader("Why this transaction requires review")
+    st.subheader("Assessment evidence and explanation")
     explanation = prepare_explanation(final_report)
     if explanation is None:
         st.caption("Evidence detail unavailable for this report.")
@@ -161,15 +161,20 @@ if run_audit and query:
         if not explanation["suspicious_patterns"]:
             st.write("No suspicious patterns identified in this assessment.")
         st.caption("Supporting links are model-attributed. Reference validation confirms admitted-source membership, not semantic proof or illegality.")
-        for title, links in (("Finding support", explanation["finding_attributions"]),
-                             ("Regulation / guidance support", explanation["regulation_attributions"])):
+        for title, coverage in (("Finding support", explanation["finding_coverage"]),
+                                ("Regulation / guidance support", explanation["regulation_coverage"])):
             st.markdown(f"**{title}**")
-            for link in links:
-                st.write(link["claim"])
-                st.write(link["support_summary"])
-                st.caption("Evidence references: " + ", ".join(link["evidence_references"]))
-            if not links:
-                st.write("Model-attributed support unavailable.")
+            for item in coverage:
+                st.write(item["claim"])
+                link = item["attribution"]
+                if link:
+                    st.caption("Model-attributed support available.")
+                    st.write(link["support_summary"])
+                    st.caption("Evidence references: " + ", ".join(link["evidence_references"]))
+                else:
+                    st.caption("Model-attributed support unavailable.")
+            if not coverage:
+                st.write("No claims in this category.")
         st.markdown("**Evidence supplied to the final assessment**")
         st.caption("Transaction records concern transaction facts; regulatory guidance concerns standards and does not prove transaction behavior.")
         if explanation["admitted_evidence"]:

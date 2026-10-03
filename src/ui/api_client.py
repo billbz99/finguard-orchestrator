@@ -196,28 +196,54 @@ def prepare_explanation(report: dict[str, Any]) -> dict[str, Any] | None:
         return value if isinstance(value, list) else []
     def text(value):
         return value if isinstance(value, str) else None
-    evidence_fields = ("evidence_reference", "indexed_document_id", "source_label", "document_type",
-                       "evidence_role", "record_locator", "chunk_locator", "jurisdiction")
-    evidence = [{key: (item.get(key) if key == "chunk_locator"
-                       and isinstance(item.get(key), int) and not isinstance(item.get(key), bool)
-                       else text(item.get(key))) for key in evidence_fields}
-                for item in items(explanation.get("admitted_evidence")) if isinstance(item, dict)]
-    references = {item["evidence_reference"] for item in evidence if isinstance(item["evidence_reference"], str)}
-    def links(value):
-        return [{key: item.get(key) for key in ("claim", "evidence_references", "support_summary")}
-                for item in items(value) if isinstance(item, dict)
-                and isinstance(item.get("claim"), str) and isinstance(item.get("support_summary"), str)
-                and isinstance(item.get("evidence_references"), list)
-                and item["evidence_references"]
-                and all(isinstance(ref, str) and ref in references for ref in item["evidence_references"])]
+    evidence_fields = ("evidence_reference", "source_label", "document_type", "evidence_role")
+    evidence = [{key: text(item.get(key)) for key in evidence_fields}
+                for item in items(explanation.get("admitted_evidence")) if isinstance(item, dict)
+                and isinstance(item.get("evidence_reference"), str)
+                and item.get("evidence_role") in {"transaction_record", "regulatory_guidance", "unknown"}]
+    references = {item["evidence_reference"]: item for item in evidence}
+    patterns = list(dict.fromkeys(item for item in items(explanation.get("suspicious_patterns")) if isinstance(item, str)))
+    rules = list(dict.fromkeys(item for item in items(report.get("applicable_regulations")) if isinstance(item, str)))
+    def links(value, claims, role):
+        groups = {}
+        for item in items(value):
+            if not isinstance(item, dict) or not isinstance(item.get("claim"), str):
+                continue
+            refs = item.get("evidence_references")
+            valid = isinstance(refs, list) and refs and all(isinstance(ref, str) for ref in refs)
+            link = {"claim": item["claim"], "evidence_references": list(dict.fromkeys(refs)),
+                    "support_summary": item.get("support_summary")} if valid and isinstance(item.get("support_summary"), str) else None
+            groups.setdefault(item["claim"], []).append(link)
+        result = []
+        for claim, entries in groups.items():
+            item = entries[0]
+            if item is None or claim not in claims or any(entry != item for entry in entries[1:]):
+                continue
+            refs = item["evidence_references"]
+            if all(ref in references for ref in refs) and any(references[ref]["evidence_role"] == role for ref in refs):
+                result.append(item)
+        return result
+    findings = links(explanation.get("finding_attributions"), patterns, "transaction_record")
+    regulations = links(explanation.get("regulation_attributions"), rules, "regulatory_guidance")
+    attributed_refs = {ref for item in findings + regulations for ref in item["evidence_references"]}
+    for item in evidence:
+        if item["evidence_role"] != "regulatory_guidance" and item["evidence_reference"] not in attributed_refs:
+            item["source_label"] = None
+    def coverage(claims, attributions):
+        by_claim = {item["claim"]: item for item in attributions}
+        return [{"claim": claim, "attribution": by_claim.get(claim)} for claim in claims]
+    covered = len(findings) + len(regulations)
+    total = len(patterns) + len(rules)
     return {
         "suspicious_patterns": [item for item in items(explanation.get("suspicious_patterns")) if isinstance(item, str)],
         "assessment_summary": explanation.get("assessment_summary") if isinstance(explanation.get("assessment_summary"), str) else report.get("audit_summary", ""),
         "required_evidence_gaps": [item for item in items(explanation.get("required_evidence_gaps")) if isinstance(item, str)],
         "admitted_evidence": evidence,
-        "finding_attributions": links(explanation.get("finding_attributions")),
-        "regulation_attributions": links(explanation.get("regulation_attributions")),
-        "attribution_status": text(explanation.get("attribution_status")) or "unavailable",
+        "finding_attributions": findings,
+        "finding_coverage": coverage(patterns, findings),
+        "regulation_attributions": regulations,
+        "regulation_coverage": coverage(rules, regulations),
+        "attribution_status": "available" if covered and covered == total else "partial" if covered else "unavailable",
         "critic_action": text(explanation.get("critic_action")),
         "critic_failure_type": text(explanation.get("critic_failure_type")),
         "refinement_occurred": explanation.get("refinement_occurred") if isinstance(explanation.get("refinement_occurred"), bool) else None,

@@ -83,13 +83,9 @@ class EvidenceProvenance(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     evidence_reference: str
-    indexed_document_id: str
     source_label: str | None = None
     document_type: str | None = None
     evidence_role: Literal["transaction_record", "regulatory_guidance", "unknown"]
-    record_locator: str | None = None
-    chunk_locator: str | int | None = None
-    jurisdiction: str | None = None
 
 
 class ReportExplainability(BaseModel):
@@ -136,21 +132,6 @@ class ComplianceReport(BaseModel):
     explainability: ReportExplainability | None = Field(default=None, description="Final-pass provenance and model-attributed support, separate from runtime telemetry")
     
 class AMLAssessment(BaseModel):
-    evidence_attribution: AssessmentAttribution | None = Field(
-        default=None, description="Optional support links for existing findings/regulations to this pass's admitted references"
-    )
-
-    @field_validator("evidence_attribution", mode="before")
-    @classmethod
-    def optional_attribution(cls, value: object) -> AssessmentAttribution | None:
-        """Malformed optional attribution must not invalidate core AML output."""
-        if value is None:
-            return None
-        try:
-            return AssessmentAttribution.model_validate(value)
-        except (ValidationError, TypeError, ValueError):
-            return None
-
     risk_rating: str = Field(
         description="Low, Medium, or High AML risk assessment"
     )
@@ -191,6 +172,22 @@ class AMLAssessment(BaseModel):
         )
     )
     
+    evidence_attribution: AssessmentAttribution | None = Field(
+        default=None, description="Optional support links for existing findings/regulations to this pass's admitted references"
+    )
+
+    @field_validator("evidence_attribution", mode="before")
+    @classmethod
+    def optional_attribution(cls, value: object) -> AssessmentAttribution | None:
+        """Malformed optional attribution must not invalidate core AML output."""
+        if value is None:
+            return None
+        try:
+            return AssessmentAttribution.model_validate(value)
+        except (ValidationError, TypeError, ValueError):
+            return None
+
+
 class CriticAssessment(BaseModel):
     """Critiques the AML assessment and recommends the next workflow action."""
 

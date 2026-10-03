@@ -129,30 +129,48 @@ existing assessment summary, suspicious patterns, required evidence gaps, final
 critic outcome, refinement indicator, and an allowlisted registry of evidence
 actually admitted to the final AML pass. The existing AML call receives labelled
 blocks such as `P1-E1`; pass-scoped references prevent an earlier refinement pass
-from being cited as final evidence. Registry fields include indexed identity,
-source label, document type/role, and available record/chunk/jurisdiction locators.
-No document text, arbitrary metadata, retrieval scores, prompts, or provider
-payloads are added to this section.
+from being cited as final evidence. Retrieved text is serialized as a JSON string
+with square brackets Unicode-escaped, so document text cannot insert a literal
+application evidence header or a new physical header line.
+
+Public provenance includes evidence reference, document type/role and permitted
+source labels. Indexed IDs, record/chunk locators and jurisdiction remain internal
+and are not returned or cached in the explanation. Unattributed transaction source
+labels are also withheld. Structured provenance excludes raw document content,
+arbitrary metadata, retrieval scores, prompts and provider payloads.
 
 Optional model attributions link exact existing patterns or regulations to those
 references and contain a concise analyst-facing support statement. Reference
-validation checks membership in final admitted evidence, not semantic proof.
+validation checks final-pass membership and evidence role, not semantic proof.
+Finding links require at least one transaction record; regulation links require at
+least one regulatory-guidance item. All references must resolve. Exact duplicate
+references collapse in order; identical claim entries collapse, while conflicting
+entries for a claim fail closed. Coverage is available only if every existing
+pattern/regulation has valid attribution, partial if some do, unavailable if none
+do (including when there are no claims). The UI shows availability per claim.
 Regulatory guidance concerns standards and does not prove transaction behavior.
 Unknown references or claims discard the entire affected link; malformed or
 missing attribution remains unavailable and never changes risk, evidence policy,
 critic routing, or assessment status. This adds no LLM call and requests no private
-chain-of-thought. Model-authored summaries still require analyst review.
+chain-of-thought. `support_summary` (capped at 600 characters) and `audit_summary`
+are model-generated text and may paraphrase or quote supplied evidence; they need
+privacy review and analyst review. This is not a redaction subsystem.
 
 Legacy reports and deterministic bypass reports can omit explainability. The UI
 shows an unavailable fallback. A cached explanation remains part of its originating
 report and is never combined with fresh request facts or retrieval provenance;
-semantic similarity does not constitute a fresh assessment. Runtime observability
+cached explanations are privacy-sanitized on read, with malformed explanation
+sections replaced by an unavailable fallback. Semantic similarity does not
+constitute a fresh assessment. Runtime observability
 continues to report new work separately. `source_document_hashes` remains the legacy
 field name for source labels (usually filenames), not cryptographic content hashes
 or verified citations.
 
 Golden contracts optionally assert finding/regulation evidence-reference
-relationships. Offline replay validates contracts/routing using fakes, not real
+relationships. Real-model expectations require the specified relationships as a
+subset and allow additional valid links; offline replay retains exact equality.
+Duplicate claim entries are aggregated without overwriting earlier references.
+Offline replay validates contracts/routing using fakes, not real
 model grounding; provider-backed evaluation remains separately opt-in.
 
 ### Request-scoped LLM observability

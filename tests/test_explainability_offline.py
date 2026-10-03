@@ -50,13 +50,13 @@ def state(value=None, context=None, count=1):
 def test_reference_membership(reference, accepted):
     explanation = build_explainability(state(assessment({"findings": [link(references=[reference])]})))
     assert bool(explanation.finding_attributions) == accepted
-    assert explanation.attribution_status == ("available" if accepted else "unavailable")
+    assert explanation.attribution_status == ("partial" if accepted else "unavailable")
 
 
 def test_mixed_unknown_reference_rejects_whole_link_and_claims_must_exist():
     explanation = build_explainability(state(assessment({"findings": [
         link(references=["P1-E1", "UNKNOWN"]), link(claim="invented")],
-        "regulations": [link(claim="FINRA Rule 3310")]})))
+        "regulations": [link(claim="FINRA Rule 3310")]}), context=[chunk(role="regulatory_pdf")]))
     assert explanation.finding_attributions == []
     assert len(explanation.regulation_attributions) == 1
     assert explanation.attribution_status == "partial"
@@ -69,7 +69,7 @@ def test_missing_attribution_not_fabricated_and_metadata_honest():
     assert explanation.admitted_evidence[0].source_label is None
     assert explanation.admitted_evidence[0].evidence_role == "unknown"
     assert explanation.admitted_evidence[1].evidence_reference == "P1-E3"
-    assert explanation.admitted_evidence[1].chunk_locator == 0
+    assert "chunk_locator" not in explanation.admitted_evidence[1].model_dump()
     assert "not citable" in labelled_context(context, 1)
 
 
@@ -112,7 +112,8 @@ def test_below_threshold_cannot_support_and_prompt_has_only_admitted_labels(monk
     result, prompts, calls = run_graph(monkeypatch, attribution={"findings": [link(references=["P1-E3"])]})
     # The node numbers the admitted list: P1-E2 is the threshold-equal document, not the rejected one.
     explanation = result["final_report"]["explainability"]
-    assert [item["indexed_document_id"] for item in explanation["admitted_evidence"]] == ["record-a", "at"]
+    assert [item["evidence_reference"] for item in explanation["admitted_evidence"]] == ["P1-E1", "P1-E2"]
+    assert [item["id"] for item in result["retrieved_context"]] == ["record-a", "at"]
     assert explanation["finding_attributions"] == []
     aml_prompt = next(prompt for schema, prompt in prompts if schema is AMLAssessment)
     assert "Evidence P1-E1 | role: transaction_record" in aml_prompt
@@ -139,7 +140,8 @@ def test_refinement_replaces_prior_pass_provenance(monkeypatch, reference, accep
     result, prompts, calls = run_graph(monkeypatch, refine=True, attribution={"findings": [link(references=[reference])]})
     explanation = result["final_report"]["explainability"]
     assert explanation["refinement_occurred"] is True
-    assert explanation["admitted_evidence"][0]["indexed_document_id"] == "final"
+    assert explanation["admitted_evidence"][0]["evidence_reference"] == "P2-E1"
+    assert result["retrieved_context"][0]["id"] == "final"
     assert bool(explanation["finding_attributions"]) == accepted
     assert result["loop_count"] == 2 and len(calls) == 2 and len(prompts) == 5
     assert "prior" not in json.dumps(explanation)
@@ -206,11 +208,11 @@ def test_ui_explanation_drops_arbitrary_nested_metadata_and_null_lists():
         "suspicious_patterns": None, "required_evidence_gaps": None,
         "finding_attributions": None, "regulation_attributions": None,
         "admitted_evidence": [{"evidence_reference": "P1-E1", "source_label": {"secret": "PRIVATE"},
-            "metadata": {"secret": "PRIVATE"}, "content": "PRIVATE", "chunk_locator": 0}],
+            "metadata": {"secret": "PRIVATE"}, "content": "PRIVATE", "chunk_locator": 0, "evidence_role": "unknown"}],
         "critic_action": {"secret": "PRIVATE"}}})
     assert "PRIVATE" not in json.dumps(prepared)
     assert prepared["admitted_evidence"][0]["source_label"] is None
-    assert prepared["admitted_evidence"][0]["chunk_locator"] == 0
+    assert "chunk_locator" not in prepared["admitted_evidence"][0]
 
 
 def test_golden_relationship_matcher_rejects_wrong_link():
