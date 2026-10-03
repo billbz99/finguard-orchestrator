@@ -18,7 +18,7 @@ from src.observability.llm_usage import (
     LLMUsageCollector,
     load_xai_pricing,
 )
-from src.observability.investigation import InvestigationCollector
+from src.observability.investigation import InvestigationCollector, log_telemetry_failure
 from src.utils.cache import (
     get_semantic_cache,
     set_semantic_cache,
@@ -65,11 +65,18 @@ def _safe_observability(
         envelope = AuditObservability(llm_usage=collector.snapshot())
         if investigation is not None:
             try:
-                envelope.investigation = investigation.snapshot(state)
-            except Exception:
-                pass
+                details = investigation.snapshot(state)
+                if os.getenv("FINGUARD_EXPOSE_RETRIEVAL_DETAILS", "0").strip().lower() not in {"1", "true", "yes"}:
+                    payload = details.model_dump()
+                    for observation in payload["retrieval_passes"]:
+                        observation.pop("candidates", None)
+                    details = type(details).model_validate(payload)
+                envelope.investigation = details
+            except Exception as exc:
+                log_telemetry_failure("investigation.snapshot", exc)
         return envelope
-    except Exception:
+    except Exception as exc:
+        log_telemetry_failure("llm.snapshot", exc)
         return None
 
 

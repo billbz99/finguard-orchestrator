@@ -1,9 +1,22 @@
 """Request-scoped numeric diagnostics, independent of graph evidence/state."""
 
+import logging
 import threading
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+logger = logging.getLogger(__name__)
+
+
+def log_telemetry_failure(context: str, error: Exception) -> None:
+    """Log only fixed context and exception type, never exception contents."""
+    try:
+        logger.warning("Telemetry failure context=%s error_type=%s", context, type(error).__name__)
+    except Exception:
+        # A broken logging handler must not turn optional telemetry into a failure.
+        pass
 
 
 class CandidateDiagnostics(BaseModel):
@@ -42,23 +55,27 @@ class InvestigationCollector:
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._passes: dict[int, RetrievalDiagnostics] = {}
+        self._candidate_ids: dict[int, list[str]] = {}
 
-    def record_retrieval(self, pass_index: int, **values: Any) -> None:
+    def record_retrieval(self, pass_index: int, *, candidate_ids: list[str], **values: Any) -> None:
         observation = RetrievalDiagnostics(pass_index=pass_index, **values)
+        if len(candidate_ids) != len(observation.candidates):
+            raise ValueError("Candidate identity count mismatch")
         with self._lock:
             self._passes[pass_index] = observation
+            self._candidate_ids[pass_index] = list(candidate_ids)
 
-    def record_admission(self, pass_index: int, admitted_count: int) -> None:
+    def record_admission(self, pass_index: int, admitted_ids: list[str]) -> None:
+        """Observe the AML node's selected identities without reproducing policy."""
         with self._lock:
             observation = self._passes.get(pass_index)
             if observation is not None:
-                observation.admitted_count = admitted_count
-                for candidate in observation.candidates:
-                    candidate.admitted = (
-                        candidate.shortlisted
-                        and candidate.rerank_score is not None
-                        and candidate.rerank_score >= 0.15
-                    )
+                selected = set(admitted_ids)
+                payload = observation.model_dump()
+                payload["admitted_count"] = len(admitted_ids)
+                for candidate, identity in zip(payload["candidates"], self._candidate_ids[pass_index]):
+                    candidate["admitted"] = identity in selected
+                self._passes[pass_index] = RetrievalDiagnostics.model_validate(payload)
 
     def snapshot(self, state: dict[str, Any] | None) -> InvestigationDiagnostics:
         if state is None:
@@ -91,5 +108,5 @@ def observe(observer: Any, method: str, *args: Any, **kwargs: Any) -> None:
     if observer is not None:
         try:
             getattr(observer, method)(*args, **kwargs)
-        except Exception:
-            pass
+        except Exception as exc:
+            log_telemetry_failure("observer." + method, exc)

@@ -134,10 +134,16 @@ API responses can include request-scoped telemetry for:
 - configured model and response-reported model identity when supplied;
 - critic-pass and refinement counts, plus per-pass vector, reranked, shortlist,
   and admitted evidence counts;
-- developer-only candidate distances, rerank scores, and shortlist/admission
+- optionally exposed candidate distances, rerank scores, and shortlist/admission
   membership, without document text or arbitrary metadata;
 - semantic-cache status;
 - estimated provider cost and pricing revision.
+
+Per-candidate details are omitted from API responses by default (the candidate
+list is empty). Set server-side `FINGUARD_EXPOSE_RETRIEVAL_DETAILS=1` to include
+vector distances, rerank scores and shortlist/admission membership for developer
+diagnostics. This setting affects all API callers; it is not authorization.
+Aggregate counts remain available, and the UI supports either setting.
 
 `observability.investigation` retains retrieval history across refinement passes.
 Critic passes follow the existing `loop_count`; completed investigations have

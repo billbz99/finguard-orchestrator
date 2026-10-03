@@ -5,7 +5,7 @@ import re
 import threading
 from typing import Any, Dict
 from langchain_core.runnables import RunnableConfig
-from src.observability.investigation import observe
+from src.observability.investigation import log_telemetry_failure, observe
 from src.graph.evidence_policy import DeficiencyType, evaluate_evidence_policy
 from src.graph.state import AgentState
 from src.graph.schemas import (
@@ -142,7 +142,12 @@ def aml_audit_node(state: AgentState, config: RunnableConfig | None = None) -> D
         c for c in chunks
         if c.get("rerank_score", 0.0) >= 0.15
     ]
-    observe(observer, "record_admission", pass_index, len(valid_chunks))
+    if observer is not None:
+        try:
+            admitted_ids = [chunk["id"] for chunk in valid_chunks]
+            observe(observer, "record_admission", pass_index, admitted_ids)
+        except Exception as exc:
+            log_telemetry_failure("admission.diagnostics", exc)
 
     print(
         f"[AML Audit Node] Found {len(valid_chunks)} "

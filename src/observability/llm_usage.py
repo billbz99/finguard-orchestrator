@@ -11,7 +11,7 @@ from uuid import UUID
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 from pydantic import BaseModel, ConfigDict, Field
-from src.observability.investigation import InvestigationDiagnostics
+from src.observability.investigation import InvestigationDiagnostics, log_telemetry_failure
 
 
 CallUsageStatus = Literal["reported", "unavailable", "failed"]
@@ -207,8 +207,9 @@ def _message_from_result(response: LLMResult) -> Any:
     return None
 
 
-def _extract_usage(response: LLMResult) -> tuple[dict[str, int | None], str | None]:
-    message = _message_from_result(response)
+def _extract_usage(response: LLMResult, message: Any = None) -> tuple[dict[str, int | None], str | None]:
+    if message is None:
+        message = _message_from_result(response)
     usage = getattr(message, "usage_metadata", None)
     response_metadata = getattr(message, "response_metadata", None) or {}
     llm_output = response.llm_output or {}
@@ -357,7 +358,8 @@ class LLMUsageCollector(BaseCallbackHandler):
         del serialized, messages, parent_run_id, kwargs
         try:
             self._start(run_id=run_id, tags=tags, metadata=metadata)
-        except Exception:
+        except Exception as exc:
+            log_telemetry_failure("llm.callback", exc)
             return
 
     def on_llm_start(
@@ -374,7 +376,8 @@ class LLMUsageCollector(BaseCallbackHandler):
         del serialized, prompts, parent_run_id, kwargs
         try:
             self._start(run_id=run_id, tags=tags, metadata=metadata)
-        except Exception:
+        except Exception as exc:
+            log_telemetry_failure("llm.callback", exc)
             return
 
     def on_llm_end(
@@ -392,14 +395,14 @@ class LLMUsageCollector(BaseCallbackHandler):
                 active = self._active.pop(run_id, None)
             if active is None:
                 return
-            usage, request_id = _extract_usage(response)
             message = _message_from_result(response)
+            usage, request_id = _extract_usage(response, message)
             metadata = getattr(message, "response_metadata", None) or {}
-            reported_model = (
-                metadata.get("model_name") or metadata.get("model")
-                or (response.llm_output or {}).get("model_name")
-                or (response.llm_output or {}).get("model")
-            )
+            reported_model = next((value for value in (
+                metadata.get("model_name"), metadata.get("model"),
+                (response.llm_output or {}).get("model_name"),
+                (response.llm_output or {}).get("model"),
+            ) if isinstance(value, str)), None)
             reported = all(
                 usage[key] is not None
                 for key in ("input_tokens", "output_tokens", "total_tokens")
@@ -415,7 +418,8 @@ class LLMUsageCollector(BaseCallbackHandler):
             )
             with self._lock:
                 self._calls.append(call)
-        except Exception:
+        except Exception as exc:
+            log_telemetry_failure("llm.callback", exc)
             return
 
     def on_llm_error(
@@ -441,7 +445,8 @@ class LLMUsageCollector(BaseCallbackHandler):
             )
             with self._lock:
                 self._calls.append(call)
-        except Exception:
+        except Exception as exc:
+            log_telemetry_failure("llm.callback", exc)
             return
 
     def snapshot(self) -> AuditLLMUsage:

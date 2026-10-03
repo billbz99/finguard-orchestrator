@@ -143,17 +143,20 @@ def prepare_diagnostics(payload: dict[str, Any]) -> dict[str, Any]:
     usage = usage if isinstance(usage, dict) else {}
     investigation = envelope.get("investigation") or {}
     investigation = investigation if isinstance(investigation, dict) else {}
+    def diagnostic_list(value):
+        return value if isinstance(value, list) else []
+
     call_fields = ("node", "call_index", "latency_ms", "usage_status", "input_tokens",
                    "output_tokens", "total_tokens", "reported_model")
     calls = [{key: call.get(key) for key in call_fields}
-             for call in usage.get("calls", []) if isinstance(call, dict)]
+             for call in diagnostic_list(usage.get("calls")) if isinstance(call, dict)]
     passes, scores = [], []
-    for observation in investigation.get("retrieval_passes", []):
+    for observation in diagnostic_list(investigation.get("retrieval_passes")):
         if not isinstance(observation, dict):
             continue
         passes.append({key: observation.get(key) for key in
                        ("pass_index", "candidate_count", "reranked_count", "shortlist_count", "admitted_count")})
-        for candidate in observation.get("candidates", []):
+        for candidate in diagnostic_list(observation.get("candidates")):
             if isinstance(candidate, dict):
                 scores.append({"pass_index": observation.get("pass_index"), **{
                     key: candidate.get(key) for key in

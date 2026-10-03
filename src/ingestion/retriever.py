@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import chromadb
 from chromadb.utils import embedding_functions
-from src.observability.investigation import observe
+from src.observability.investigation import log_telemetry_failure, observe
 
 
 class RuntimeAssetError(RuntimeError):
@@ -169,7 +169,7 @@ class FinGuardRetriever:
 
         if not documents:
             observe(observer, "record_retrieval", pass_index,
-                    candidate_count=0, reranked_count=0, shortlist_count=0, candidates=[])
+                    candidate_count=0, reranked_count=0, shortlist_count=0, candidates=[], candidate_ids=[])
             return []
 
         sentence_pairs = [[query, doc] for doc in documents]
@@ -191,6 +191,7 @@ class FinGuardRetriever:
                 shortlisted = {c["id"] for c in candidate_pool[:top_n_final]}
                 observe(
                     observer, "record_retrieval", pass_index,
+                    candidate_ids=ids,
                     candidate_count=len(documents), reranked_count=len(sentence_pairs),
                     shortlist_count=len(candidate_pool[:top_n_final]),
                     candidates=[{
@@ -200,6 +201,6 @@ class FinGuardRetriever:
                         "shortlisted": ids[i] in shortlisted,
                     } for i in range(len(documents))],
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                log_telemetry_failure("retrieval.diagnostics", exc)
         return candidate_pool[:top_n_final]

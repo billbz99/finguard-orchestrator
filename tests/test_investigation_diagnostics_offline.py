@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
+from threading import Barrier
 from uuid import uuid4
 
 import pytest
@@ -83,7 +84,7 @@ def test_retrieval_alignment_and_admission():
     collector = InvestigationCollector()
     chunks = instance.retrieve("query", top_k_vector=10, top_n_final=3, observer=collector)
     assert [c["id"] for c in chunks] == ["c", "b", "a"]
-    collector.record_admission(1, len([c for c in chunks if c["rerank_score"] >= 0.15]))
+    collector.record_admission(1, [c["id"] for c in chunks if c["rerank_score"] >= 0.15])
     observation = collector.snapshot(completed()).retrieval_passes[0]
     assert (observation.candidate_count, observation.reranked_count, observation.shortlist_count,
             observation.admitted_count) == (4, 4, 3, 2)
@@ -94,7 +95,7 @@ def test_retrieval_alignment_and_admission():
     assert "private" not in observation.model_dump_json()
     instance.collection.query = lambda **kwargs: {"documents": [[]], "ids": [[]], "metadatas": [[]]}
     assert instance.retrieve("empty", observer=collector, pass_index=2) == []
-    collector.record_admission(2, 0)
+    collector.record_admission(2, [])
     assert collector.snapshot(completed(2)).retrieval_passes[1].candidate_count == 0
 
 
@@ -114,17 +115,86 @@ def test_missing_distances_and_observer_failure():
 
 def test_shared_retriever_concurrent_request_isolation():
     instance = retriever()
+    barrier = Barrier(2)
+    def interleaved_scores(pairs):
+        barrier.wait(timeout=5)
+        return [0.149, 0.15, 0.8, 0.01] if pairs[0][0] == "first" else [0.9, 0.1, 0.01, 0.02]
+    instance.reranker.predict = interleaved_scores
     first, second = InvestigationCollector(), InvestigationCollector()
     with ThreadPoolExecutor() as executor:
-        list(executor.map(lambda collector: instance.retrieve("query", observer=collector), [first, second]))
-    first.record_admission(1, 2)
+        futures = [executor.submit(instance.retrieve, query, observer=collector)
+                   for query, collector in (("first", first), ("second", second))]
+        for future in futures:
+            future.result(timeout=10)
+    first.record_admission(1, ["b", "c"])
     assert first.snapshot(completed()).retrieval_passes[0].admitted_count == 2
     assert second.snapshot(completed()).retrieval_passes[0].admitted_count is None
     assert all(c.admitted is None for c in second.snapshot(completed()).retrieval_passes[0].candidates)
     assert not hasattr(instance, "observer")
+    assert second.snapshot(completed()).retrieval_passes[0].candidates[0].rerank_score == 0.9
 
 
-@pytest.mark.parametrize("refine", [False, True])
+def test_admission_observes_ids_even_when_scores_disagree_and_validates():
+    from pydantic import ValidationError
+    collector = InvestigationCollector()
+    collector.record_retrieval(1, candidate_ids=["a", "b"], candidate_count=2,
+        reranked_count=2, shortlist_count=2, candidates=[
+            {"candidate_index": 1, "rerank_score": 0.001, "shortlisted": True},
+            {"candidate_index": 2, "rerank_score": 100, "shortlisted": True}])
+    collector.record_admission(1, ["a"])
+    observation = collector.snapshot(completed()).retrieval_passes[0]
+    assert [c.admitted for c in observation.candidates] == [True, False]
+    assert observation.admitted_count == 1
+    collector._passes[1].candidate_count = -1
+    with pytest.raises(ValidationError):
+        collector.record_admission(1, [])
+
+
+def test_ties_and_fewer_than_top_n():
+    instance = retriever()
+    instance.collection.query = lambda **kwargs: {"documents": [["x", "y"]],
+        "ids": [["x", "y"]], "metadatas": [[{}, {}]], "distances": [[0.1, 0.2]]}
+    instance.reranker.predict = lambda pairs: [0.15, 0.15]
+    collector = InvestigationCollector()
+    selected = instance.retrieve("query", top_n_final=3, observer=collector)
+    collector.record_admission(1, [c["id"] for c in selected])
+    observation = collector.snapshot(completed()).retrieval_passes[0]
+    assert observation.shortlist_count == observation.admitted_count == 2
+    assert all(c.admitted for c in observation.candidates)
+
+
+@pytest.mark.parametrize("value", [None, "invalid", {}, 1, [None, {}, "invalid"]])
+def test_null_and_non_list_ui_fields(value):
+    payload = {"observability": {"llm_usage": {"calls": value},
+        "investigation": {"retrieval_passes": value}}}
+    result = prepare_diagnostics(payload)
+    assert result["input_tokens"] == "Unavailable"
+    result = prepare_diagnostics({"observability": {"investigation": {
+        "retrieval_passes": [{"candidates": value}]}}})
+    assert result["retrieval_passes"][0]["admitted_count"] is None
+
+
+def test_empty_observer_failure_logs_safely(caplog):
+    instance = retriever()
+    instance.collection.query = lambda **kwargs: {"documents": [[]], "ids": [[]], "metadatas": [[]]}
+    class Broken:
+        def record_retrieval(self, *args, **kwargs):
+            raise RuntimeError("PRIVATE QUERY SECRET")
+    assert instance.retrieve("PRIVATE QUERY SECRET", observer=Broken()) == []
+    assert "RuntimeError" in caplog.text
+    assert "PRIVATE" not in caplog.text
+    assert len(caplog.records) == 1
+
+
+def test_broken_logging_handler_cannot_fail_observer(monkeypatch):
+    from src.observability import investigation
+    def fail(*args, **kwargs):
+        raise RuntimeError("private")
+    monkeypatch.setattr(investigation.logger, "warning", fail)
+    investigation.observe(SimpleNamespace(record_admission=fail), "record_admission", 1, [])
+
+
+@pytest.mark.parametrize("refine", [False, True, "max_loop"])
 def test_graph_history_and_unchanged_report_on_observer_failure(monkeypatch, refine):
     instance = retriever()
     monkeypatch.setattr(nodes, "get_production_retriever", lambda: instance)
@@ -136,10 +206,10 @@ def test_graph_history_and_unchanged_report_on_observer_failure(monkeypatch, ref
                     return TransactionExtraction()
                 if schema is AMLAssessment:
                     calls[schema] += 1
-                    gaps = ["REGULATORY_CONTEXT"] if refine and calls[schema] == 1 else []
+                    gaps = ["REGULATORY_CONTEXT"] if refine == "max_loop" or (refine and calls[schema] == 1) else []
                     return AMLAssessment(risk_rating="Low", required_evidence_gaps=gaps,
                                          reasoning_summary="fixture", insufficient_evidence=bool(gaps))
-                return CriticAssessment(is_sufficient=True, failure_type="NONE", recommended_action="GENERATE", critique="fixture")
+                return CriticAssessment(is_sufficient=False, failure_type="MISSING_REGULATORY_CONTEXT", recommended_action="RETRIEVE_MORE", critique="fixture") if refine == "max_loop" else CriticAssessment(is_sufficient=True, failure_type="NONE", recommended_action="GENERATE", critique="fixture")
             return SimpleNamespace(invoke=invoke)
         monkeypatch.setattr(nodes, "get_llm", lambda: SimpleNamespace(with_structured_output=structured))
         state = {"raw_query": "wire", "loop_count": 0, "max_loops": 2}
@@ -149,9 +219,12 @@ def test_graph_history_and_unchanged_report_on_observer_failure(monkeypatch, ref
     diagnostics = collector.snapshot(result)
     assert diagnostics.status == "reported"
     assert diagnostics.critic_pass_count == (2 if refine else 1)
-    assert diagnostics.refinement_count == int(refine)
+    assert diagnostics.refinement_count == int(bool(refine))
     assert len(diagnostics.retrieval_passes) == (2 if refine else 1)
     assert all(p.admitted_count == 2 for p in diagnostics.retrieval_passes)
+    if refine == "max_loop":
+        assert result["critic_assessment"]["recommended_action"] == "STOP_INSUFFICIENT"
+        assert result["final_report"]["assessment_status"] == "INSUFFICIENT_EVIDENCE"
     class Broken:
         def record_retrieval(self, *args, **kwargs): raise RuntimeError("telemetry")
         def record_admission(self, *args, **kwargs): raise RuntimeError("telemetry")
@@ -164,8 +237,8 @@ def test_api_additive_and_report_only_cache(monkeypatch):
     class Graph:
         async def ainvoke(self, state, config):
             collector = config["configurable"]["investigation_collector"]
-            collector.record_retrieval(1, candidate_count=0, reranked_count=0, shortlist_count=0, candidates=[])
-            collector.record_admission(1, 0)
+            collector.record_retrieval(1, candidate_count=0, reranked_count=0, shortlist_count=0, candidates=[], candidate_ids=[])
+            collector.record_admission(1, [])
             return {**completed(), "final_report": report}
     saved = []
     monkeypatch.setattr(main, "graph", Graph())
@@ -198,3 +271,50 @@ def test_unknown_workflow_not_zero_filled():
     assert InvestigationCollector().snapshot({}).critic_pass_count is None
     assert InvestigationCollector().snapshot({"loop_count": 1}).refinement_count is None
     assert InvestigationCollector().snapshot(None).refinement_count == 0
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_api_candidate_exposure_setting(monkeypatch, enabled):
+    from src import main
+    collector = InvestigationCollector()
+    selected = retriever().retrieve("private", observer=collector)
+    collector.record_admission(1, [c["id"] for c in selected])
+    monkeypatch.delenv("FINGUARD_EXPOSE_RETRIEVAL_DETAILS", raising=False)
+    if enabled:
+        monkeypatch.setenv("FINGUARD_EXPOSE_RETRIEVAL_DETAILS", "1")
+    envelope = main._safe_observability(LLMUsageCollector(provider="xAI", model="fixture"), collector, completed())
+    observation = envelope.investigation.retrieval_passes[0]
+    assert observation.candidate_count == 4
+    assert observation.admitted_count == 4
+    assert bool(observation.candidates) == enabled
+    assert "private" not in envelope.model_dump_json()
+    ui = prepare_diagnostics({"observability": envelope.model_dump()})
+    assert bool(ui["scores"]) == enabled
+
+
+@pytest.mark.parametrize("cache_hit", [True, False])
+def test_api_zero_work_paths(monkeypatch, cache_hit):
+    from src import main
+    report = {"assessment_status": "COMPLETE", "risk_rating": "LOW", "audit_summary": "fixture"}
+    monkeypatch.setattr(main, "get_semantic_cache", lambda *a, **k: report if cache_hit else None)
+    monkeypatch.setattr(main, "route_incoming_audit", lambda **k: "DETERMINISTIC_PASS")
+    monkeypatch.setattr(main, "run_deterministic_ach_check", lambda state: report)
+    saved = []
+    monkeypatch.setattr(main, "set_semantic_cache", lambda query, value: saved.append(value))
+    body = TestClient(main.app).post("/api/v1/audit", json={"query": "fixture"}).json()
+    diagnostics = body["observability"]
+    assert diagnostics["investigation"] == {"status": "not_applicable", "critic_pass_count": 0,
+        "refinement_count": 0, "retrieval_passes": []}
+    assert diagnostics["llm_usage"]["logical_call_count"] == 0
+    assert diagnostics["llm_usage"]["total_latency_ms"] == 0
+    assert saved == ([] if cache_hit else [report])
+
+
+def test_non_string_model_does_not_mask_reported_identity():
+    collector = LLMUsageCollector(provider="xAI", model="configured")
+    run = uuid4()
+    collector.on_chat_model_start({}, [[]], run_id=run)
+    collector.on_llm_end(LLMResult(generations=[[ChatGeneration(message=AIMessage(
+        content="fixture", response_metadata={"model_name": 123, "model": "reported"}
+    ))]]), run_id=run)
+    assert collector.snapshot().calls[0].reported_model == "reported"
