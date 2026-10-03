@@ -129,14 +129,16 @@ existing assessment summary, suspicious patterns, required evidence gaps, final
 critic outcome, refinement indicator, and an allowlisted registry of evidence
 actually admitted to the final AML pass. The existing AML call receives labelled
 blocks such as `P1-E1`; pass-scoped references prevent an earlier refinement pass
-from being cited as final evidence. Retrieved text is serialized as a JSON string
+from being cited as final evidence. Retrieved text is serialized as an ASCII-escaped JSON string
 with square brackets Unicode-escaped, so document text cannot insert a literal
 application evidence header or a new physical header line.
 
 Public provenance includes evidence reference, document type/role and permitted
 source labels. Indexed IDs, record/chunk locators and jurisdiction remain internal
 and are not returned or cached in the explanation. Unattributed transaction source
-labels are also withheld. Structured provenance excludes raw document content,
+labels are also withheld within explainability provenance. This minimization does
+not apply to the legacy report-level `source_document_hashes` field, which retains
+its existing source-label behavior for compatibility. Structured provenance excludes raw document content,
 arbitrary metadata, retrieval scores, prompts and provider payloads.
 
 Optional model attributions link exact existing patterns or regulations to those

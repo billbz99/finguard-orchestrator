@@ -86,7 +86,7 @@ def evidence_registry(context: list[dict[str, Any]], pass_index: int) -> list[In
 
 
 def labelled_context(context: list[dict[str, Any]], pass_index: int) -> str:
-    """Label the same admitted text without adding metadata or dropping evidence."""
+    """Label admitted strings; unexpected content types contribute no prompt text."""
     registry = {item.evidence_reference: item for item in evidence_registry(context, pass_index)}
     blocks = []
     for index, chunk in enumerate(context, 1):
@@ -94,7 +94,8 @@ def labelled_context(context: list[dict[str, Any]], pass_index: int) -> str:
         item = registry.get(reference)
         label = f"Evidence {reference} | role: {item.evidence_role}" if item else "Evidence without indexed identity | role: unknown | not citable"
         # A JSON string has one physical line; content brackets cannot forge headers.
-        content = json.dumps(chunk.get("content", ""), ensure_ascii=False)
+        raw_content = chunk.get("content", "")
+        content = json.dumps(raw_content if isinstance(raw_content, str) else "", ensure_ascii=True)
         content = content.replace("[", r"\u005b").replace("]", r"\u005d")
         blocks.append(f"[{label}]\nDocument text (JSON string): {content}")
     return "\n\n".join(blocks)
