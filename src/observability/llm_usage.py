@@ -11,6 +11,7 @@ from uuid import UUID
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 from pydantic import BaseModel, ConfigDict, Field
+from src.observability.investigation import InvestigationDiagnostics, log_telemetry_failure
 
 
 CallUsageStatus = Literal["reported", "unavailable", "failed"]
@@ -103,6 +104,7 @@ class LLMCallUsage(BaseModel):
     reasoning_tokens: int | None = Field(default=None, ge=0)
     latency_ms: float | None = Field(default=None, ge=0)
     provider_request_id: str | None = None
+    reported_model: str | None = None
 
 
 class AuditLLMUsage(BaseModel):
@@ -125,6 +127,8 @@ class AuditLLMUsage(BaseModel):
     cost_status: CostStatus
     pricing_revision: str | None = None
     calls: list[LLMCallUsage] = Field(default_factory=list)
+    total_latency_ms: float | None = Field(default=None, ge=0)
+    latency_status: AuditUsageStatus = "unavailable"
 
 
 class AuditObservability(BaseModel):
@@ -133,6 +137,7 @@ class AuditObservability(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     llm_usage: AuditLLMUsage
+    investigation: InvestigationDiagnostics | None = None
 
 
 @dataclass(frozen=True)
@@ -202,8 +207,9 @@ def _message_from_result(response: LLMResult) -> Any:
     return None
 
 
-def _extract_usage(response: LLMResult) -> tuple[dict[str, int | None], str | None]:
-    message = _message_from_result(response)
+def _extract_usage(response: LLMResult, message: Any = None) -> tuple[dict[str, int | None], str | None]:
+    if message is None:
+        message = _message_from_result(response)
     usage = getattr(message, "usage_metadata", None)
     response_metadata = getattr(message, "response_metadata", None) or {}
     llm_output = response.llm_output or {}
@@ -265,6 +271,8 @@ def no_llm_usage(*, provider: str, model: str) -> AuditLLMUsage:
         estimated_cost_usd=Decimal("0"),
         cost_status="not_applicable",
         calls=[],
+        total_latency_ms=0,
+        latency_status="not_applicable",
     )
 
 
@@ -350,7 +358,8 @@ class LLMUsageCollector(BaseCallbackHandler):
         del serialized, messages, parent_run_id, kwargs
         try:
             self._start(run_id=run_id, tags=tags, metadata=metadata)
-        except Exception:
+        except Exception as exc:
+            log_telemetry_failure("llm.callback", exc)
             return
 
     def on_llm_start(
@@ -367,7 +376,8 @@ class LLMUsageCollector(BaseCallbackHandler):
         del serialized, prompts, parent_run_id, kwargs
         try:
             self._start(run_id=run_id, tags=tags, metadata=metadata)
-        except Exception:
+        except Exception as exc:
+            log_telemetry_failure("llm.callback", exc)
             return
 
     def on_llm_end(
@@ -385,7 +395,14 @@ class LLMUsageCollector(BaseCallbackHandler):
                 active = self._active.pop(run_id, None)
             if active is None:
                 return
-            usage, request_id = _extract_usage(response)
+            message = _message_from_result(response)
+            usage, request_id = _extract_usage(response, message)
+            metadata = getattr(message, "response_metadata", None) or {}
+            reported_model = next((value for value in (
+                metadata.get("model_name"), metadata.get("model"),
+                (response.llm_output or {}).get("model_name"),
+                (response.llm_output or {}).get("model"),
+            ) if isinstance(value, str) and value), None)
             reported = all(
                 usage[key] is not None
                 for key in ("input_tokens", "output_tokens", "total_tokens")
@@ -396,11 +413,13 @@ class LLMUsageCollector(BaseCallbackHandler):
                 usage_status="reported" if reported else "unavailable",
                 latency_ms=round((time.monotonic() - active.started_at) * 1000, 3),
                 provider_request_id=request_id,
+                reported_model=reported_model if isinstance(reported_model, str) else None,
                 **usage,
             )
             with self._lock:
                 self._calls.append(call)
-        except Exception:
+        except Exception as exc:
+            log_telemetry_failure("llm.callback", exc)
             return
 
     def on_llm_error(
@@ -426,7 +445,8 @@ class LLMUsageCollector(BaseCallbackHandler):
             )
             with self._lock:
                 self._calls.append(call)
-        except Exception:
+        except Exception as exc:
+            log_telemetry_failure("llm.callback", exc)
             return
 
     def snapshot(self) -> AuditLLMUsage:
@@ -476,6 +496,12 @@ class LLMUsageCollector(BaseCallbackHandler):
             pricing=self.pricing,
         )
 
+        durations = [call.latency_ms for call in calls if call.latency_ms is not None]
+        latency_status = (
+            "reported" if len(durations) == logical_call_count and active_count == 0
+            else "partial" if durations else "unavailable"
+        )
+
         return AuditLLMUsage(
             usage_status=usage_status,
             provider=self.provider,
@@ -492,4 +518,6 @@ class LLMUsageCollector(BaseCallbackHandler):
             cost_status=cost_status,
             pricing_revision=pricing_revision,
             calls=calls,
+            total_latency_ms=round(sum(durations), 3) if durations else None,
+            latency_status=latency_status,
         )

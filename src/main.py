@@ -18,6 +18,7 @@ from src.observability.llm_usage import (
     LLMUsageCollector,
     load_xai_pricing,
 )
+from src.observability.investigation import InvestigationCollector, log_telemetry_failure
 from src.utils.cache import (
     get_semantic_cache,
     set_semantic_cache,
@@ -56,11 +57,26 @@ class AuditResponse(BaseModel):
 
 def _safe_observability(
     collector: LLMUsageCollector,
+    investigation: InvestigationCollector | None = None,
+    state: dict[str, Any] | None = None,
 ) -> AuditObservability | None:
     """Keep optional telemetry failures outside the audit result path."""
     try:
-        return AuditObservability(llm_usage=collector.snapshot())
-    except Exception:
+        envelope = AuditObservability(llm_usage=collector.snapshot())
+        if investigation is not None:
+            try:
+                details = investigation.snapshot(state)
+                if os.getenv("FINGUARD_EXPOSE_RETRIEVAL_DETAILS", "0").strip().lower() not in {"1", "true", "yes"}:
+                    payload = details.model_dump()
+                    for observation in payload["retrieval_passes"]:
+                        observation.pop("candidates", None)
+                    details = type(details).model_validate(payload)
+                envelope.investigation = details
+            except Exception as exc:
+                log_telemetry_failure("investigation.snapshot", exc)
+        return envelope
+    except Exception as exc:
+        log_telemetry_failure("llm.snapshot", exc)
         return None
 
 
@@ -118,6 +134,8 @@ async def execute_audit(request: AuditRequest):
         model=os.getenv("XAI_MODEL", "grok-4.3"),
         pricing=load_xai_pricing(),
     )
+    investigation_collector = InvestigationCollector()
+    result_state = None
     
     # 1. Check Redis / In-Memory Semantic Cache
     cached_report = get_semantic_cache(request.query, threshold=0.80)
@@ -128,7 +146,7 @@ async def execute_audit(request: AuditRequest):
             cache_status="CACHE_HIT",
             execution_latency_ms=round(latency, 2),
             report=cached_report,
-            observability=_safe_observability(usage_collector),
+            observability=_safe_observability(usage_collector, investigation_collector),
         )
 
     # 2. Evaluate Pre-Router
@@ -158,6 +176,7 @@ async def execute_audit(request: AuditRequest):
         config = {
             "tags": ["AML_AUDIT_RUN", "FASTAPI_SERVICE"],
             "callbacks": [usage_collector],
+            "configurable": {"investigation_collector": investigation_collector},
             "metadata": {
                 "client_tier": request.client_tier,
                 "audit_id": request.audit_id or f"aud-{int(time.time())}",
@@ -188,7 +207,7 @@ async def execute_audit(request: AuditRequest):
         cache_status="CACHE_MISS",
         execution_latency_ms=round(latency, 2),
         report=report,
-        observability=_safe_observability(usage_collector),
+        observability=_safe_observability(usage_collector, investigation_collector, result_state),
     )
 
 
