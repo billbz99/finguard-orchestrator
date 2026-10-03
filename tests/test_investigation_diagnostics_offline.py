@@ -310,11 +310,16 @@ def test_api_zero_work_paths(monkeypatch, cache_hit):
     assert saved == ([] if cache_hit else [report])
 
 
-def test_non_string_model_does_not_mask_reported_identity():
+@pytest.mark.parametrize("model_name, expected", [
+    ("", "reported"),
+    ("preferred", "preferred"),
+    (123, "reported"),
+])
+def test_reported_model_selection_skips_empty_and_non_string_names(model_name, expected):
     collector = LLMUsageCollector(provider="xAI", model="configured")
     run = uuid4()
     collector.on_chat_model_start({}, [[]], run_id=run)
     collector.on_llm_end(LLMResult(generations=[[ChatGeneration(message=AIMessage(
-        content="fixture", response_metadata={"model_name": 123, "model": "reported"}
+        content="fixture", response_metadata={"model_name": model_name, "model": "reported"}
     ))]]), run_id=run)
-    assert collector.snapshot().calls[0].reported_model == "reported"
+    assert collector.snapshot().calls[0].reported_model == expected

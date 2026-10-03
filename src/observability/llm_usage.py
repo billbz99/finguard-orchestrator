@@ -402,7 +402,7 @@ class LLMUsageCollector(BaseCallbackHandler):
                 metadata.get("model_name"), metadata.get("model"),
                 (response.llm_output or {}).get("model_name"),
                 (response.llm_output or {}).get("model"),
-            ) if isinstance(value, str)), None)
+            ) if isinstance(value, str) and value), None)
             reported = all(
                 usage[key] is not None
                 for key in ("input_tokens", "output_tokens", "total_tokens")
